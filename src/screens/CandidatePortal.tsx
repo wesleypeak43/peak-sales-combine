@@ -52,11 +52,13 @@ export function CandidatePortal({ V }: { V: any }) {
             <div style={{marginTop: "16px", background: "rgba(16,185,129,.08)", border: "1px solid rgba(16,185,129,.4)", borderRadius: "14px", padding: "22px 24px"}}>
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#34D399", marginBottom: "8px"}}>Decision</div>
               <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "6px"}}>We’d like to move forward with you.</div>
-              <p style={{margin: "0 0 14px", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>Two evaluators independently reviewed your combine, interview, and evidence. Ramón Delgado, Regional Sales Director, will call you within two business days to walk through the offer and cohort start date. A copy of this decision was emailed to you.</p>
+              <p style={{margin: "0 0 14px", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>{V.decisionAdvanceTxt}</p>
+              {V.isDemo ? (<>
               <div style={{display: "flex", gap: "8px", flexWrap: "wrap"}}>
                 <button style={{background: "#10B981", color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>Pick a time for the call</button>
                 <button style={{background: "transparent", color: "#E9F0EA", border: "1px solid rgba(160,190,170,.3)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>Download decision letter</button>
               </div>
+              </>) : null}
             </div>
           </>) : null}
           {V.decisionDecline ? (<>
@@ -258,8 +260,14 @@ export function CandidatePortal({ V }: { V: any }) {
               </div>
             </div>
             <div style={{display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "18px", alignItems: "center"}}>
-              <button disabled={!!(V.joinDisabled)} style={{background: "#20302680", color: "#5C6B61", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "not-allowed"}}>Join — opens 10 min before</button>
+              {V.joinHref ? (<>
+                <a href={V.joinHref} target="_blank" rel="noreferrer" style={{background: "#10B981", color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer", textDecoration: "none"}}>Join the session</a>
+              </>) : (<>
+                <button disabled={!!(V.joinDisabled)} style={{background: "#20302680", color: "#5C6B61", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "not-allowed"}}>{V.isDemo ? 'Join — opens 10 min before' : 'Join link arrives with your session'}</button>
+              </>)}
+              {V.isDemo ? (<>
               <button style={{background: "transparent", color: "#E9F0EA", border: "1px solid rgba(160,190,170,.3)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>Add to calendar</button>
+              </>) : null}
               {V.notResched ? (<>
                 <button onClick={V.askResched} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0 6px", textDecoration: "underline"}} className="ps2">Request a different time</button>
               </>) : null}

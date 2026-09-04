@@ -24,6 +24,9 @@ export function EvaluatorCockpit({ V }: { V: any }) {
                 </>) : null}
               </div>
             </React.Fragment>))}
+            {V.noSessions ? (<>
+              <div style={{background: "#0F1611", border: "1px dashed rgba(160,190,170,.22)", borderRadius: "14px", padding: "22px", fontSize: "13.5px", color: "#8FA396", lineHeight: "1.6"}}>No combine sessions are assigned to you yet. Sessions appear here as soon as a hiring manager schedules one with you as an evaluator.</div>
+            </>) : null}
           </div>
         </div>
       </>) : null}
@@ -31,7 +34,7 @@ export function EvaluatorCockpit({ V }: { V: any }) {
         <div style={{animation: "fadeUp .35s ease both"}}>
           <div style={{display: "flex", alignItems: "center", gap: "16px", marginBottom: "20px", flexWrap: "wrap"}}>
             <button onClick={V.goRoster} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0"}} className="ps2">← Sessions</button>
-            <h1 style={{margin: "0", fontSize: "24px", fontWeight: "900"}}>Live combine — Tyler Nguyen</h1>
+            <h1 style={{margin: "0", fontSize: "24px", fontWeight: "900"}}>{"Live combine — "}{V.liveCandName}</h1>
             <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#7E9186"}}>Exercise A · Sell the Chicken Sandwich</div>
             <div style={{marginLeft: "auto", display: "flex", gap: "6px", flexWrap: "wrap"}}>
               {(V.phaseSteps ?? []).map((p: any, $index: number) => (<React.Fragment key={$index}>
@@ -43,7 +46,7 @@ export function EvaluatorCockpit({ V }: { V: any }) {
             <div style={{display: "flex", flexDirection: "column", gap: "16px"}}>
               <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "20px 22px"}}>
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "10px"}}>Candidate brief</div>
-                <p style={{margin: "0", fontSize: "13px", lineHeight: "1.6", color: "#D5DED7"}}>Tyler Nguyen · Sponsorship Sales Consultant · Waco, TX. Sales decisions 78/100 (Meets profile) · application evidence rated High. Built a resale business to $18K profit over 14 months. Pending: full combine.</p>
+                <p style={{margin: "0", fontSize: "13px", lineHeight: "1.6", color: "#D5DED7"}}>{V.liveBrief}</p>
                 <div style={{display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "12px"}}>
                   {(V.liveFlags ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".06em", textTransform: "uppercase", color: f?.fg, background: f?.bg, border: `1px solid ${f?.border}`, padding: "4px 9px", borderRadius: "99px"}}>{f?.label}</span>
@@ -155,13 +158,13 @@ export function EvaluatorCockpit({ V }: { V: any }) {
               {V.showCompare ? (<>
                 <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px"}}>
                   <div style={{fontSize: "17px", fontWeight: "800", marginBottom: "4px"}}>Evaluator agreement</div>
-                  <p style={{margin: "0 0 16px", fontSize: "12.5px", color: "#8FA396"}}>Your scores vs. J. Whitfield (submitted 9:14 AM). Differences over 1.5 are flagged for a calibration discussion.</p>
+                  <p style={{margin: "0 0 16px", fontSize: "12.5px", color: "#8FA396"}}>{V.agreeIntro}</p>
                   <div style={{display: "flex", flexDirection: "column", gap: "10px"}}>
                     {(V.agreeRows ?? []).map((a: any, $index: number) => (<React.Fragment key={$index}>
                       <div style={{display: "flex", alignItems: "center", gap: "14px", background: a?.bg, border: `1px solid ${a?.border}`, borderRadius: "10px", padding: "12px 16px"}}>
                         <div style={{flex: "1", fontSize: "13.5px", fontWeight: "700"}}>{a?.name}</div>
                         <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "13px", color: "#D5DED7"}}>{"You "}{a?.mine}</div>
-                        <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "13px", color: "#8FA396"}}>{"JW "}{a?.other}</div>
+                        <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "13px", color: "#8FA396"}}>{(V.otherShort || 'Other') + " "}{a?.other}</div>
                         <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", fontWeight: "700", color: a?.flagColor, width: "130px", textAlign: "right"}}>{a?.flagTxt}</div>
                       </div>
                     </React.Fragment>))}
@@ -198,8 +201,8 @@ export function EvaluatorCockpit({ V }: { V: any }) {
         <div style={{animation: "fadeUp .35s ease both"}}>
           <div style={{display: "flex", alignItems: "center", gap: "16px", marginBottom: "20px", flexWrap: "wrap"}}>
             <button onClick={V.goIvList} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0"}} className="ps2">← Interviews</button>
-            <h1 style={{margin: "0", fontSize: "24px", fontWeight: "900"}}>Structured interview — Tyler Nguyen</h1>
-            <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#7E9186"}}>Thu 3:15 PM · after the combine · 40 min · with J. Whitfield</div>
+            <h1 style={{margin: "0", fontSize: "24px", fontWeight: "900"}}>{V.ivTitle}</h1>
+            <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#7E9186"}}>{V.ivMeta}</div>
           </div>
           <div style={{display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "20px", alignItems: "start"}}>
             <div style={{display: "flex", flexDirection: "column", gap: "14px"}}>
@@ -227,12 +230,12 @@ export function EvaluatorCockpit({ V }: { V: any }) {
               </div>
               <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px"}}>
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "8px"}}>Submit</div>
-                <p style={{margin: "0 0 14px", fontSize: "12.5px", color: "#8FA396", lineHeight: "1.55"}}>{"Scores lock on submit and stay hidden from J. Whitfield until she submits hers. "}{V.ivProgress}</p>
+                <p style={{margin: "0 0 14px", fontSize: "12.5px", color: "#8FA396", lineHeight: "1.55"}}>{V.ivLockNote}{V.ivProgress}</p>
                 {V.ivNotSubmitted ? (<>
                   <button onClick={V.submitIv} disabled={!!(V.ivBlocked)} style={{background: V.ivSubmitBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "13px 24px", fontSize: "14px", fontWeight: "800", cursor: "pointer"}}>Submit independent scores</button>
                 </>) : null}
                 {V.ivSubmitted ? (<>
-                  <div style={{fontSize: "13.5px", fontWeight: "700", color: "#34D399"}}>Submitted · waiting on J. Whitfield before agreement is shown.</div>
+                  <div style={{fontSize: "13.5px", fontWeight: "700", color: "#34D399"}}>{V.ivSubmittedNote}</div>
                 </>) : null}
               </div>
               <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px"}}>

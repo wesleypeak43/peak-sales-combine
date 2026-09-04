@@ -37,6 +37,12 @@ export function AppShell({ V }: { V: any }) {
         <button onClick={V.exitRole} style={{background: "transparent", color: "#8FA396", border: "1px solid rgba(160,190,170,.22)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "600", cursor: "pointer"}} className="ps7">{V.exitLabel}</button>
       </div>
     </header>
+    {V.saveErr ? (<>
+      <div style={{background: "rgba(248,113,113,.12)", borderBottom: "1px solid rgba(248,113,113,.35)", color: "#F87171", fontSize: "12.5px", fontWeight: "700", padding: "8px 28px", textAlign: "center"}}>{V.saveErr}</div>
+    </>) : null}
+    {V.flashErr ? (<>
+      <div onClick={V.clearFlash} title="Click to dismiss" style={{background: "rgba(245,184,74,.12)", borderBottom: "1px solid rgba(245,184,74,.35)", color: "#F5B84A", fontSize: "12.5px", fontWeight: "700", padding: "8px 28px", textAlign: "center", cursor: "pointer"}}>{V.flashErr}{" · click to dismiss"}</div>
+    </>) : null}
     <ViewAsBanner V={V} />
     <ExpiredLink V={V} />
     <CandidatePortal V={V} />

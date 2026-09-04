@@ -2,6 +2,9 @@
 // V is the view-model returned by PeakCombine.renderVals(): values, lists, and event handlers.
 import React from 'react';
 
+const INPUT = {width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#E9F0EA", fontSize: "13px"} as any;
+const MONO_LABEL = {fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "#7E9186"} as any;
+
 
 export function StaffDashboard({ V }: { V: any }) {
   return V.isStaff ? (<>
@@ -59,6 +62,29 @@ export function StaffDashboard({ V }: { V: any }) {
             </label>
           </div>
           <p style={{margin: "0 0 18px", fontSize: "12.5px", color: "#8FA396", maxWidth: "720px", lineHeight: "1.55"}}>Blind review hides names, photos, and school names during early screening. Candidates are compared against the role standard — never ranked by prestige, polish, or similarity to current leaders.</p>
+          {V.showInviteForm ? (<>
+            <div style={{background: "#0F1611", border: "1px solid rgba(16,185,129,.25)", borderRadius: "14px", padding: "20px 22px", marginBottom: "18px"}}>
+              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "12px"}}>Invite a candidate</div>
+              <div style={{display: "grid", gridTemplateColumns: "1.3fr 1.4fr 1fr 1.4fr", gap: "10px"}}>
+                <input value={(V.ncName) ?? ''} onChange={V.setNcName} placeholder="Full name" style={INPUT} />
+                <input value={(V.ncEmail) ?? ''} onChange={V.setNcEmail} placeholder="Email" style={INPUT} />
+                <input value={(V.ncPhone) ?? ''} onChange={V.setNcPhone} placeholder="Phone (optional)" style={INPUT} />
+                <select value={(V.ncRole) ?? ''} onChange={V.setNcRole} style={INPUT}>
+                  {(V.ncRoles ?? []).map((r: any, $index: number) => (<React.Fragment key={$index}>
+                    <option value={r}>{r}</option>
+                  </React.Fragment>))}
+                </select>
+              </div>
+              <div style={{display: "flex", gap: "8px", alignItems: "center", marginTop: "12px", flexWrap: "wrap"}}>
+                <button onClick={V.ncEmailInvite} disabled={!!(V.ncBlocked)} style={{background: V.ncBtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>{"Create & email invite"}</button>
+                <button onClick={V.ncCopyInvite} disabled={!!(V.ncBlocked)} style={{background: "transparent", color: V.ncBlocked ? "#3A453D" : "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>{"Create & copy link"}</button>
+                <span style={{fontSize: "12px", color: "#5C6B61"}}>The link is personal to this candidate and expires 3 days after it is sent.</span>
+              </div>
+              {V.ncSaved ? (<>
+                <div style={{fontSize: "12.5px", color: V.ncSavedColor, fontWeight: "700", marginTop: "10px", wordBreak: "break-all"}}>{V.ncSaved}</div>
+              </>) : null}
+            </div>
+          </>) : null}
           <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", overflow: "hidden"}}>
             <div style={{display: "grid", gridTemplateColumns: "2fr 1.6fr 1.8fr .8fr .9fr auto", gap: "12px", padding: "12px 22px", borderBottom: "1px solid rgba(160,190,170,.12)", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "#7E9186"}}>
               <div>Candidate</div>
@@ -73,6 +99,12 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div>
                   <div style={{fontSize: "14.5px", fontWeight: "700"}}>{p?.dName}</div>
                   <div style={{fontSize: "11.5px", color: "#5C6B61"}}>{p?.dSub}</div>
+                  {p?.inviteState ? (<>
+                    <div style={{fontSize: "11px", color: p?.inviteColor, marginTop: "3px"}}>{p?.inviteState}</div>
+                  </>) : null}
+                  {p?.flash ? (<>
+                    <div style={{fontSize: "11px", color: "#34D399", marginTop: "4px", wordBreak: "break-all"}}>{p?.flash}</div>
+                  </>) : null}
                 </div>
                 <div style={{fontSize: "12.5px", color: "#A7B5AB"}}>{p?.role}</div>
                 <div style={{fontSize: "12px", color: p?.stageColor, fontWeight: "600"}}>{p?.stageLabel}</div>
@@ -87,9 +119,16 @@ export function StaffDashboard({ V }: { V: any }) {
                   {V.canViewAs ? (<>
                     <button onClick={p?.viewAs} title="Open this candidate's portal read-only (logged)" style={{background: "transparent", color: "#5B9BFF", border: "1px solid rgba(91,155,255,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>View as</button>
                   </>) : null}
+                  {p?.showInvite ? (<>
+                    <button onClick={p?.resend} style={{background: "transparent", color: "#E9D9B0", border: "1px solid rgba(245,184,74,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{p?.resendTxt}</button>
+                    <button onClick={p?.copy} style={{background: "transparent", color: "#A7B5AB", border: "1px solid rgba(160,190,170,.2)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>Copy link</button>
+                  </>) : null}
                 </div>
               </div>
             </React.Fragment>))}
+            {V.pipeEmpty ? (<>
+              <div style={{padding: "26px 22px", fontSize: "13.5px", color: "#8FA396", lineHeight: "1.6"}}>No candidates yet. Invite the first one above — they get a personal link and appear here the moment the record is created.</div>
+            </>) : null}
           </div>
           {V.canCompare ? (<>
             <div style={{display: "flex", alignItems: "center", gap: "14px", marginTop: "14px", background: "rgba(16,185,129,.07)", border: "1px solid rgba(16,185,129,.3)", borderRadius: "12px", padding: "14px 20px"}}>
@@ -121,6 +160,13 @@ export function StaffDashboard({ V }: { V: any }) {
               </div>
             </div>
           </div>
+          {V.pNeedsScore ? (<>
+            <div style={{background: "rgba(245,184,74,.06)", border: "1px solid rgba(245,184,74,.4)", borderRadius: "12px", padding: "14px 20px", marginBottom: "20px", display: "flex", gap: "14px", alignItems: "center", flexWrap: "wrap"}}>
+              <span style={{fontSize: "13px", color: "#E9D9B0", lineHeight: "1.55", flex: "1"}}>Sales Decisions answers are in, but the report has not been scored yet.</span>
+              <button onClick={V.rescore} style={{background: "#F5B84A", color: "#04120B", border: "none", borderRadius: "9px", padding: "9px 16px", fontSize: "12.5px", fontWeight: "800", cursor: "pointer"}}>Score now</button>
+              {V.pScoreMsg ? (<><span style={{fontSize: "12.5px", color: "#34D399", fontWeight: "700"}}>{V.pScoreMsg}</span></>) : null}
+            </div>
+          </>) : null}
           {V.pHasReport ? (<>
             <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "24px 26px", marginBottom: "20px"}}>
               <div style={{display: "flex", gap: "32px", alignItems: "flex-start", flexWrap: "wrap"}}>
@@ -551,34 +597,44 @@ export function StaffDashboard({ V }: { V: any }) {
           <p style={{margin: "0 0 22px", fontSize: "13px", color: "#8FA396", maxWidth: "700px", lineHeight: "1.6"}}>Any two evaluators differing by more than 1.5 points on a competency triggers a flag. Flags are resolved in a calibration discussion — never averaged away silently.</p>
           <div style={{display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "20px", alignItems: "start"}}>
             <div style={{display: "flex", flexDirection: "column", gap: "14px"}}>
-              <div style={{background: "rgba(245,184,74,.05)", border: "1px solid rgba(245,184,74,.35)", borderRadius: "14px", padding: "22px 24px"}}>
-                <div style={{display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px"}}>
-                  <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "700", letterSpacing: ".12em", textTransform: "uppercase", color: "#04120B", background: "#F5B84A", padding: "4px 10px", borderRadius: "99px"}}>Open flag</span>
-                  <span style={{fontSize: "15px", fontWeight: "800"}}>Marcus Reeves — Self-Accountability</span>
-                </div>
-                <div style={{display: "flex", gap: "24px", marginBottom: "14px"}}>
-                  <div>
-                    <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "#7E9186"}}>J. Whitfield</div>
-                    <div style={{fontSize: "26px", fontWeight: "900"}}>4.0</div>
+              {(V.calFlags ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
+                {f?.open ? (<>
+                  <div style={{background: "rgba(245,184,74,.05)", border: "1px solid rgba(245,184,74,.35)", borderRadius: "14px", padding: "22px 24px"}}>
+                    <div style={{display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px"}}>
+                      <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "700", letterSpacing: ".12em", textTransform: "uppercase", color: "#04120B", background: "#F5B84A", padding: "4px 10px", borderRadius: "99px"}}>Open flag</span>
+                      <span style={{fontSize: "15px", fontWeight: "800"}}>{f?.title}</span>
+                    </div>
+                    <div style={{display: "flex", gap: "24px", marginBottom: "14px"}}>
+                      <div>
+                        <div style={MONO_LABEL}>{f?.e1}</div>
+                        <div style={{fontSize: "26px", fontWeight: "900"}}>{f?.s1}</div>
+                      </div>
+                      <div>
+                        <div style={MONO_LABEL}>{f?.e2}</div>
+                        <div style={{fontSize: "26px", fontWeight: "900"}}>{f?.s2}</div>
+                      </div>
+                      <div>
+                        <div style={{...MONO_LABEL, color: "#F5B84A"}}>Delta</div>
+                        <div style={{fontSize: "26px", fontWeight: "900", color: "#F5B84A"}}>{f?.delta}</div>
+                      </div>
+                    </div>
+                    <p style={{margin: "0 0 14px", fontSize: "12.5px", color: "#A7B5AB", lineHeight: "1.6"}}>{f?.note}</p>
+                    {V.isDemo ? (<>
+                      <button style={{background: "#F5B84A", color: "#04120B", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>Schedule calibration discussion</button>
+                    </>) : null}
                   </div>
-                  <div>
-                    <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "#7E9186"}}>R. Delgado</div>
-                    <div style={{fontSize: "26px", fontWeight: "900"}}>2.0</div>
+                </>) : (<>
+                  <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "20px 24px"}}>
+                    <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
+                      <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "700", letterSpacing: ".12em", textTransform: "uppercase", color: "#34D399", background: "rgba(16,185,129,.12)", padding: "4px 10px", borderRadius: "99px"}}>Resolved</span>
+                      <span style={{fontSize: "14px", fontWeight: "700"}}>{f?.title}</span>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "#F5B84A"}}>Delta</div>
-                    <div style={{fontSize: "26px", fontWeight: "900", color: "#F5B84A"}}>2.0</div>
-                  </div>
-                </div>
-                <p style={{margin: "0 0 14px", fontSize: "12.5px", color: "#A7B5AB", lineHeight: "1.6"}}>Delgado cites the interview: “attributed the missed Q3 target entirely to territory; named no personal change when asked twice.” Whitfield weighted the polished simulation more heavily.</p>
-                <button style={{background: "#F5B84A", color: "#04120B", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>Schedule calibration discussion</button>
-              </div>
-              <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "20px 24px"}}>
-                <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
-                  <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "700", letterSpacing: ".12em", textTransform: "uppercase", color: "#34D399", background: "rgba(16,185,129,.12)", padding: "4px 10px", borderRadius: "99px"}}>Resolved</span>
-                  <span style={{fontSize: "14px", fontWeight: "700"}}>Dana Okafor — all competencies within 0.5</span>
-                </div>
-              </div>
+                </>)}
+              </React.Fragment>))}
+              {V.calFlagsEmpty ? (<>
+                <div style={{background: "#0F1611", border: "1px dashed rgba(160,190,170,.22)", borderRadius: "14px", padding: "22px", fontSize: "13.5px", color: "#8FA396", lineHeight: "1.6"}}>No agreement checks yet — they appear once two evaluators have scored the same candidate.</div>
+              </>) : null}
             </div>
             <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px"}}>
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "14px"}}>Evaluator tendencies · last 90 days</div>
@@ -590,6 +646,9 @@ export function StaffDashboard({ V }: { V: any }) {
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: e?.color}}>{e?.note}</span>
                   </div>
                 </React.Fragment>))}
+                {V.calNote ? (<>
+                  <div style={{fontSize: "12.5px", color: "#8FA396", lineHeight: "1.6"}}>{V.calNote}</div>
+                </>) : null}
               </div>
               <p style={{margin: "16px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.55"}}>Tendencies inform training, not score adjustments. Scores are never silently re-weighted by evaluator.</p>
             </div>
@@ -619,9 +678,9 @@ export function StaffDashboard({ V }: { V: any }) {
                 <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
                   <span>Hire</span>
                   <select value={(V.ocHire) ?? ''} onChange={V.setOcHire} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#E9F0EA", fontSize: "13px"}}>
-                    <option>Alexis Grant</option>
-                    <option>Jordan Miles</option>
-                    <option>Priya Shah</option>
+                    {(V.ocHireOpts ?? []).map((h: any, $index: number) => (<React.Fragment key={$index}>
+                      <option value={h}>{h}</option>
+                    </React.Fragment>))}
                   </select>
                 </label>
                 <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
@@ -807,7 +866,11 @@ export function StaffDashboard({ V }: { V: any }) {
                   </div>
                   <div style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
                     <span>Join link</span>
-                    <div style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#34D399", fontSize: "13px", wordBreak: "break-all"}}>{V.schLink}</div>
+                    {V.schLinkEditable ? (<>
+                      <input value={(V.schLinkVal) ?? ''} onChange={V.setSchLink} placeholder="https://zoom.us/j/…" style={INPUT} />
+                    </>) : (<>
+                      <div style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#34D399", fontSize: "13px", wordBreak: "break-all"}}>{V.schLink}</div>
+                    </>)}
                   </div>
                 </div>
                 <div style={{fontSize: "12px", color: V.schWarnColor, minHeight: "16px", lineHeight: "1.5"}}>{V.schWarn}</div>
@@ -930,6 +993,9 @@ export function StaffDashboard({ V }: { V: any }) {
                 </>) : null}
               </div>
             </React.Fragment>))}
+            {V.inboxEmpty ? (<>
+              <div style={{background: "#0F1611", border: "1px dashed rgba(160,190,170,.22)", borderRadius: "14px", padding: "22px", fontSize: "13.5px", color: "#8FA396", lineHeight: "1.6"}}>No accommodation requests. Candidates can request one from their portal at any stage; it lands here.</div>
+            </>) : null}
           </div>
         </div>
       </>) : null}
@@ -1020,6 +1086,9 @@ export function StaffDashboard({ V }: { V: any }) {
                         <span style={{fontFamily: "'JetBrains Mono',monospace", textAlign: "right"}}>{f?.b}</span>
                       </div>
                     </React.Fragment>))}
+                    {V.fairNote ? (<>
+                      <div style={{fontSize: "12.5px", color: "#8FA396", lineHeight: "1.6"}}>{V.fairNote}</div>
+                    </>) : null}
                   </div>
                   <p style={{margin: "14px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.55"}}>Groups are self-reported and optional. Sample sizes are currently too small for adverse-impact analysis (4/5ths rule requires larger n). Shown for monitoring discipline only.</p>
                 </>) : null}
