@@ -1,0 +1,8 @@
+/* Hover / focus / active styles. Generated: inline styles carry the base look, these classes override on interaction. */
+.ps1:hover { border-color:#10B981 !important; }
+.ps2:hover { color:#E9F0EA !important; }
+.ps3:hover { border-color:#10B981 !important; color:#34D399 !important; }
+.ps4:hover { color:#F87171 !important; }
+.ps5:hover { color:#34D399 !important; }
+.ps6:hover { background:rgba(16,185,129,.03) !important; }
+.ps7:hover { color:#E9F0EA !important; border-color:rgba(160,190,170,.45) !important; }
