@@ -1,0 +1,8 @@
+/* Global resets and keyframes (from the prototype) */
+body{margin:0;background:#080D0A;color:#E9F0EA;font-family:'Archivo',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#10B981;text-decoration:none}a:hover{color:#34D399;text-decoration:underline}
+input::placeholder,textarea::placeholder{color:#5C6B61}
+input,textarea,select,button{font-family:inherit}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes tickPulse{0%,100%{opacity:1}50%{opacity:.55}}
+#root{min-height:100vh}
