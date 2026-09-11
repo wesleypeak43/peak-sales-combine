@@ -4,5 +4,9 @@
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/transcript.ts": { "maxDuration": 60 },
+    "api/session.ts": { "maxDuration": 30 }
+  }
 }

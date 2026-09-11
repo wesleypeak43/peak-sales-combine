@@ -30,7 +30,7 @@ const wr = (id, comp, text, opts) => ({
 
 const ENTRY = {
   id: "entry",
-  name: "Entry-Level Sales",
+  name: "Entry Level Sales Professional",
   tag: "Hiring for potential, not resume",
   blurb: "Raw traits over experience. We are looking for someone with the materials to become an elite seller.",
   experienceWeighting: "Low. Limited sales experience, unfamiliar terminology, and no quota history are not penalized.",
@@ -179,7 +179,7 @@ const ENTRY = {
 
 const SENIOR = {
   id: "senior",
-  name: "Senior Sales / Revenue Leader",
+  name: "Director of Sales",
   tag: "Owns a number for a property or market",
   blurb: "High-expectation new business. Evidence of production and repeatable sales ability, not years served.",
   experienceWeighting: "High — but weighted to evidence of production. Ten mediocre years does not outrank five exceptional ones.",
@@ -330,7 +330,7 @@ const SENIOR = {
 
 const SERVICE = {
   id: "service",
-  name: "Service / Account Management Sales",
+  name: "Director of Service",
   tag: "Grows the account, not just serves it",
   blurb: "Excellent service is the entry requirement. This role sells inside the account and protects revenue.",
   experienceWeighting: "Client experience matters, but strong service history cannot offset passive commercial behavior.",
@@ -515,8 +515,41 @@ export function flowFor(role) {
   return out;
 }
 
+export const LIKERT_LABELS = ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"];
+
+// Every answered item with the text the candidate saw, the option they chose, and what it scored —
+// this is the evidence trail behind every flag, positive, and follow-up in the report.
+export function itemEvidence(role, answers) {
+  const out = [];
+  role.likert.forEach(q => {
+    const v = answers[q.id]; if (v == null) return;
+    const pts = (q.reverse ? 6 - v : v - 1) * 25;
+    out.push({ id: q.id, kind: "likert", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: LIKERT_LABELS[v - 1] || String(v), score: pts, signal: SIGNAL(pts), note: q.reverse ? "Reverse-scored: agreeing is the concern." : "" });
+  });
+  role.pairs.forEach(q => {
+    const pick = answers[q.id]; if (!pick) return;
+    const side = pick === "a" ? q.a : q.b, other = pick === "a" ? q.b : q.a;
+    out.push({ id: q.id, kind: "pair", comp: side[0], compName: role.competencies[side[0]].name, q: "Both are good. Which is more you?", answer: side[2], score: side[1], signal: SIGNAL(side[1]), other: other[2], best: (q.a[1] >= q.b[1] ? q.a : q.b)[2] });
+  });
+  role.scenarios.forEach(q => {
+    const pick = answers[q.id]; if (pick == null) return;
+    const opt = q.opts[pick]; if (!opt) return;
+    const best = q.opts.slice().sort((x, y) => y.score - x.score)[0];
+    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: opt.text, score: opt.score, signal: SIGNAL(opt.score), best: best.i === opt.i ? "" : best.text, flag: opt.flag || "", positive: opt.positive || "" });
+  });
+  role.worst.forEach(q => {
+    const pick = answers[q.id]; if (pick == null) return;
+    const opt = q.opts[pick]; if (!opt) return;
+    const worst = q.opts.slice().sort((x, y) => y.bad - x.bad)[0];
+    out.push({ id: q.id, kind: "worst", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: opt.text, score: opt.score, signal: SIGNAL(opt.score), best: worst.i === opt.i ? "" : worst.text, flag: opt.bad === 0 ? "Misread which action carries the most risk" : "" });
+  });
+  return out;
+}
+
 export function score(role, answers, settings) {
   const st = settings || defaultSettings(role);
+  const items = itemEvidence(role, answers);
+  const byId = Object.fromEntries(items.map(it => [it.id, it]));
   const buckets = {};
   const add = (comp, pts) => { (buckets[comp] = buckets[comp] || []).push(pts); };
   const selfBuckets = {}, scenBuckets = {};
@@ -541,14 +574,32 @@ export function score(role, answers, settings) {
     const pick = answers[q.id];
     if (pick == null) return;
     const opt = q.opts[pick];
+    if (!opt) return;
     add(q.comp, opt.score);
     (scenBuckets[q.comp] = scenBuckets[q.comp] || []).push(opt.score);
+    const ev = byId[q.id] || {};
     if (opt.flag) redFlags.push({
       comp: q.comp, label: opt.flag, qid: q.id,
       severity: opt.score <= 10 ? "critical" : opt.score <= 30 ? "meaningful" : "minor",
-      context: q.text,
+      context: q.text, chosen: opt.text, better: ev.best || "", score: opt.score,
     });
-    if (opt.positive) positives.push({ comp: q.comp, label: opt.positive, qid: q.id });
+    if (opt.positive) positives.push({ comp: q.comp, label: opt.positive, qid: q.id, context: q.text, chosen: opt.text });
+  });
+
+  // Worst-move items count toward their competency like any other item; a candidate who picks the
+  // action that carries the *least* risk as "the worst move" has misread the situation.
+  role.worst.forEach(q => {
+    const pick = answers[q.id];
+    if (pick == null) return;
+    const opt = q.opts[pick];
+    if (!opt) return;
+    add(q.comp, opt.score);
+    (scenBuckets[q.comp] = scenBuckets[q.comp] || []).push(opt.score);
+    const ev = byId[q.id] || {};
+    if (opt.bad === 0) redFlags.push({
+      comp: q.comp, label: "Misread which action carries the most risk", qid: q.id,
+      severity: "meaningful", context: q.text, chosen: opt.text, better: ev.best || "", score: opt.score,
+    });
   });
 
   const comps = Object.entries(role.competencies).map(([key, c]) => {
@@ -567,24 +618,35 @@ export function score(role, answers, settings) {
   const wsum = active.reduce((a, c) => a + c.weight, 0) || 1;
   const overall = Math.round(active.reduce((a, c) => a + c.score * c.weight, 0) / wsum);
 
+  // Evidence helpers: the weakest answers behind a competency, and the self-ratings vs. scenario choices behind a consistency note.
+  const brief = it => ({ id: it.id, kind: it.kind, q: it.q, answer: it.answer, score: it.score, signal: it.signal, best: it.best || "" });
+  const weakest = (comp, n) => items.filter(it => it.comp === comp).sort((a, b) => a.score - b.score).slice(0, n).map(brief);
+
   // Response-consistency checks — never phrased as an accusation.
   const consistency = [];
   const likertVals = role.likert.map(q => answers[q.id]).filter(v => v != null);
   const extremes = likertVals.filter(v => v === 5).length;
   if (likertVals.length >= 8 && extremes / likertVals.length > 0.7)
-    consistency.push("Selected the top rating on " + Math.round((extremes / likertVals.length) * 100) + "% of self-assessment items. Self-ratings may be uniformly elevated.");
+    consistency.push({
+      t: "Selected the top rating on " + Math.round((extremes / likertVals.length) * 100) + "% of self-assessment items. Self-ratings may be uniformly elevated.",
+      evidence: items.filter(it => it.kind === "likert" && it.answer === "Strongly agree").map(brief),
+    });
   Object.keys(selfBuckets).forEach(comp => {
     if (!scenBuckets[comp]) return;
     const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
     const gap = avg(selfBuckets[comp]) - avg(scenBuckets[comp]);
-    if (gap >= 32) consistency.push(
-      "Rates themselves highly on " + role.competencies[comp].name.toLowerCase() +
-      ", but scenario choices in that area scored materially lower. Worth validating in interview."
-    );
+    if (gap >= 32) consistency.push({
+      t: "Rates themselves highly on " + role.competencies[comp].name.toLowerCase() +
+        " (self-report avg " + Math.round(avg(selfBuckets[comp])) + "), but scenario choices in that area scored materially lower (avg " + Math.round(avg(scenBuckets[comp])) + "). Worth validating in interview.",
+      evidence: items.filter(it => it.comp === comp && (it.kind === "likert" || it.kind === "scenario" || it.kind === "worst")).map(brief),
+    });
   });
   const criticalBreaches = comps.filter(c => c.critical && c.breach);
   if (criticalBreaches.length && overall >= st.thresholds.pass)
-    consistency.push("Strong overall score sitting on top of a mission-critical gap. The average is hiding the risk.");
+    consistency.push({
+      t: "Strong overall score sitting on top of a mission-critical gap (" + criticalBreaches.map(c => c.name).join(", ") + "). The average is hiding the risk.",
+      evidence: criticalBreaches.flatMap(c => weakest(c.key, 2)),
+    });
 
   let band, bandNote;
   if (overall >= st.thresholds.strongPass) [band, bandNote] = ["Strong match", "Exceptional alignment with the role profile."];
@@ -609,29 +671,25 @@ export function score(role, answers, settings) {
   const strengths = ranked.filter(c => c.score >= 75).slice(0, 5);
   const concerns = ranked.slice().reverse().filter(c => c.score < 65).slice(0, 4);
 
-  const fuKeys = [];
-  criticalBreaches.forEach(c => fuKeys.includes(c.key) || fuKeys.push(c.key));
-  redFlags.forEach(f => fuKeys.includes(f.comp) || fuKeys.push(f.comp));
-  concerns.forEach(c => fuKeys.includes(c.key) || fuKeys.push(c.key));
-  const followUps = fuKeys.slice(0, 5).map(k => ({
-    comp: role.competencies[k].name,
-    q: role.followUps[k],
-    why: comps.find(c => c.key === k).score + "/100 against a " + st.floors[k] + " floor",
-  }));
-
-  role.worst.forEach(q => {
-    const pick = answers[q.id];
-    if (pick == null) return;
-    const opt = q.opts[pick];
-    add(q.comp, opt.score);
-    (scenBuckets[q.comp] = scenBuckets[q.comp] || []).push(opt.score);
-    if (opt.bad === 0) redFlags.push({
-      comp: q.comp, label: "Misread which action carries the most risk", qid: q.id,
-      severity: "meaningful", context: q.text,
-    });
+  // Follow-ups: one per competency that breached a critical floor, carried a red flag, or scored as a concern —
+  // each with the reason it is on the list and the answers that put it there.
+  const fuKeys = [], fuWhy = {};
+  const reason = (k, r) => { if (!fuKeys.includes(k)) fuKeys.push(k); (fuWhy[k] = fuWhy[k] || []).push(r); };
+  criticalBreaches.forEach(c => reason(c.key, "below the critical floor"));
+  redFlags.forEach(f => reason(f.comp, "red flag: " + f.label));
+  concerns.forEach(c => reason(c.key, "scored as a concern"));
+  const followUps = fuKeys.slice(0, 5).map(k => {
+    const c = comps.find(x => x.key === k);
+    return {
+      comp: role.competencies[k].name,
+      q: role.followUps[k],
+      why: c.score + "/100 against a " + st.floors[k] + " floor",
+      reasons: fuWhy[k].filter((r, i, a) => a.indexOf(r) === i),
+      evidence: weakest(k, 3),
+    };
   });
 
-  const scen = role.scenarios.map(q => answers[q.id] != null ? q.opts[answers[q.id]].score : null).filter(v => v != null);
+  const scen = role.scenarios.map(q => answers[q.id] != null && q.opts[answers[q.id]] ? q.opts[answers[q.id]].score : null).filter(v => v != null);
   const scenAvg = scen.length ? Math.round(scen.reduce((a, b) => a + b, 0) / scen.length) : 0;
   const eliteCount = scen.filter(v => v >= 95).length;
   const weakCount = scen.filter(v => v <= 30).length;
@@ -642,6 +700,8 @@ export function score(role, answers, settings) {
     positives, consistency, followUps, criticalBreaches,
     scenario: { avg: scenAvg, answered: scen.length, total: role.scenarios.length, elite: eliteCount, weak: weakCount },
     references: role.behavioral,
+    items,
+    engine: 2,
   };
 }
 
@@ -675,4 +735,4 @@ export function demoAnswers(role, profile) {
   return out;
 }
 
-export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, defaultSettings, shuffled, scoredItems, flowFor, score, demoAnswers };
+export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, LIKERT_LABELS, defaultSettings, shuffled, scoredItems, flowFor, itemEvidence, score, demoAnswers };

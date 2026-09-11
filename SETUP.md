@@ -65,13 +65,40 @@ Any other staff member: Admin → **Users** → Invite a staff member → they g
 
 ## Part 6 — Run a real candidate
 
-1. **Pipeline → Invite a candidate** → name, email, role → **Create & email invite** (or **Create & copy link** to send it yourself).
-2. The candidate opens their link, completes Stages 1–3 (~60 min, can save and return). Their answers are scored on the server; the scouting report appears on their profile.
-3. **Schedule** tab → pick the candidate, date, time, two evaluators, paste your Zoom/Meet link → **Send invites**. The session shows in the candidate's portal and both evaluators' rosters.
-4. Each evaluator: header role chip **Evaluator** → **Run live session** → score → submit. Scores stay hidden from the other evaluator until both submit.
-5. Hiring manager: **Profile → Record decision**. The decision log and the candidate's portal update.
+1. **Pipeline → Add a candidate** → name, email, one of the three roles (**Entry Level Sales Professional / Director of Sales / Director of Service**), and the **school / property** the role is for (this is what the candidate sees in the email and portal). Attach a résumé if you already have one. Then either:
+   - **Add & email assessment link** — the full assessment (job preview, details & résumé, Sales Decisions · 20–30 minutes, all multiple choice), or
+   - **Details-only link** — the candidate only shares contact details and a résumé (about two minutes). Use **Send assessment link** on their row later, or
+   - **Add without sending a link** — a manual record (for people you already screened). **Email assessment link** on the row whenever you're ready.
+2. The candidate opens their link and finishes Stage 3. The assessment ends there — no scheduling on their side. Answers are scored on the server; the scouting report on their profile shows every red flag, positive signal, and follow-up **with the question and the answer that caused it**, plus the full answer trail.
+3. **Schedule** tab → pick any candidate without a session (those who finished the assessment sort first), date, time, time zone, two evaluators. Leave the join link blank to get a Google Meet link (Part 7), or paste your own. **Save & send invites**: the candidate gets an email with their **own combine link** (separate from the assessment link) and a calendar file; with Google Calendar connected, the candidate and both evaluators get calendar invitations too.
+4. The candidate opens the combine link before the session: reads the brief, submits Exercise B (written, or uploads a deck / video), confirms the recording notice.
+5. Each evaluator: header role chip **Evaluator** → **Run live session** → score → submit. Scores stay hidden from the other evaluator until both submit. The brief shows the résumé, the Exercise B file, and any transcripts.
+6. Ran the mock pitch or an interview elsewhere? **Profile → Submit a transcript for evaluation** — paste or upload the .txt/.vtt. Evaluators can read it; with Part 8 switched on, an advisory summary with verbatim quotes appears alongside.
+7. Hiring manager: **Profile → Record decision**. The decision log and the candidate's portal update.
 
-Links expire 3 days after sending; **Resend link** / **Copy link** on the pipeline row issue a fresh one, and a candidate with an expired link can email themselves a new one.
+Assessment links expire 3 days after sending; **Resend link** / **Copy link** on the pipeline row issue a fresh one, and a candidate with an expired link can email themselves a new one. Combine links stay open until two weeks after the session.
+
+## Part 7 — Google Calendar for combine sessions (optional, ~15 minutes, Google Workspace admin needed)
+
+With this, scheduling a combine creates the event on a Peak calendar, invites the candidate and both evaluators, and generates a Google Meet link. Without it, everyone still gets an email with an .ics calendar file.
+
+1. **console.cloud.google.com** → create a project (e.g. `peak-combine`) → **APIs & Services → Enable APIs** → enable **Google Calendar API**.
+2. **IAM & Admin → Service Accounts → Create** → name `peak-combine` → Done. Open it → **Keys → Add key → JSON** → download. Also copy the **Unique ID** (a long number) from the service account's details.
+3. **admin.google.com** (Workspace admin) → **Security → Access and data control → API controls → Manage Domain Wide Delegation → Add new** → Client ID = the Unique ID from step 2; OAuth scope = `https://www.googleapis.com/auth/calendar.events` → Authorize.
+4. Vercel → **Settings → Environment Variables**, add:
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL` — `client_email` from the JSON file
+   - `GOOGLE_PRIVATE_KEY` — `private_key` from the JSON file (paste it whole, including the BEGIN/END lines)
+   - `GOOGLE_CALENDAR_OWNER` — the Workspace user whose calendar hosts the sessions, e.g. `wesley@peaksportsmgmt.com`
+5. **Deployments → Redeploy**. Schedule a test session with yourself as a candidate: you should see a Google Calendar invitation and a Meet link within a minute.
+
+## Part 8 — AI-assisted transcript read (optional)
+
+1. **console.anthropic.com** → API Keys → Create key. Add it to Vercel as `ANTHROPIC_API_KEY`, then Redeploy.
+2. Submitting a transcript now also produces an advisory read: per-competency ratings with verbatim quotes, strengths, concerns, and interview follow-ups. It is labelled as assistance; evaluators score and the panel decides. Keep counsel in the loop — some jurisdictions regulate automated tools in hiring even when advisory.
+
+## Upgrading an existing database
+
+After uploading a new version of the code: Supabase → **SQL Editor** → paste the whole `supabase/schema.sql` → **Run** again. It adds the new columns, the transcripts table, the file bucket, and the combine-link functions without touching existing data, and moves candidates from the earlier role titles to the three current ones. Existing scouting reports show a **Re-score with evidence** button on the profile — click it once to attach the answer-level evidence to reports scored before this version.
 
 ---
 
@@ -79,6 +106,8 @@ Links expire 3 days after sending; **Resend link** / **Copy link** on the pipeli
 
 - Sign-in says **"Could not load the workspace"** → the SQL in Part 1 step 4 didn't run, or the Supabase keys in Vercel are wrong. Fix, then Redeploy.
 - **"Email is not configured yet"** when sending an invite → `RESEND_API_KEY` missing or domain not verified. Use **Copy link** meanwhile.
+- Scheduling says **"Google Calendar: … an .ics file was emailed instead"** → Part 7 isn't finished (usually the domain-wide delegation scope, or the private key pasted without its line breaks). The session is still saved and emailed.
+- **Résumé upload fails** → `schema.sql` hasn't been re-run since this version (the `candidate-files` bucket is created by it).
 - Set-password link says invalid → Part 1 step 5 (Redirect URLs) is missing `https://www.peaksportscareers.com/**`.
 - Site still shows "Prototype shortcuts" → `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` weren't set before the last build. Redeploy.
 

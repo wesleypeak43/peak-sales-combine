@@ -26,10 +26,8 @@ export const PEAK_DATA = {
     {id:'sim', label:'Sales simulation & objections', w:25, comps:['sj','hd','re','it']},
     {id:'repitch', label:'Coached re-pitch', w:15, comps:['co','sj']},
     {id:'case', label:'Resourcefulness case', w:15, comps:['rs','hd','de']},
-    {id:'interview', label:'Structured behavioral interview', w:20, comps:['sa','de','it','re']},
-    {id:'sjt', label:'Situational judgment', w:15, comps:['sj','sa','it','rs']},
-    {id:'app', label:'Evidence-based application', w:5, comps:['sa','rs','de']},
-    {id:'wdi', label:'Work-drive inventory', w:5, comps:['hd','re','de']}
+    {id:'interview', label:'Structured behavioral interview', w:25, comps:['sa','de','it','re']},
+    {id:'sjt', label:'Sales decisions (self-report + scenarios)', w:20, comps:['sj','sa','it','rs','hd','re','de']}
   ],
   scale: ['Strongly disagree','Disagree','Slightly disagree','Slightly agree','Agree','Strongly agree'],
   inventory: [
@@ -111,7 +109,7 @@ export const PEAK_DATA = {
   caseQs: ['Your first five actions','Prospect prioritization strategy','Week-one activity targets','Basic pipeline math','Three creative ways to generate opportunities','What you would ask your manager or university partner for','What you would do if the first two weeks produced no meetings'],
   realities: ['Consistent outbound prospecting, every week','Frequent rejection \u2014 most conversations end in no','Transparent performance accountability: your numbers are visible','CRM discipline is non-negotiable','Limited resources at some properties','Relationships with university stakeholders and local businesses','Pressure to produce measurable revenue','Travel or on-campus work when applicable','You create activity \u2014 you do not wait for opportunity'],
   candidates: [
-    {id:'marcus', name:'Marcus Reeves', anon:'Candidate #1042', role:'Sponsorship Sales Consultant', loc:'Dallas, TX', school:'SMU', stage:5, stageLabel:'Combine complete \u00b7 decision pending', readiness:3.4, r1:4.4, r2:4.5, agree:'Flagged', sjt:64, wdi:71, appEv:'Medium',
+    {id:'marcus', name:'Marcus Reeves', anon:'Candidate #1042', role:'Entry Level Sales Professional', loc:'Dallas, TX', school:'SMU', stage:5, stageLabel:'Combine complete \u00b7 decision pending', readiness:3.4, r1:4.4, r2:4.5, agree:'Flagged', sjt:64, wdi:71, appEv:'Medium',
      comp:{hd:4.3,sa:2.4,co:2.8,re:3.8,rs:3.5,sj:4.2,de:2.9,it:3.4},
      strength:{sim:'High',repitch:'Medium',case:'Medium',interview:'High',sjt:'Medium',app:'Medium',wdi:'Low'},
      strongest:'Commanding first pitch \u2014 surfaced buyer needs unprompted, reframed the price objection, closed with a clear ask. (Sim, R1, Eval: J. Whitfield)',
@@ -120,7 +118,7 @@ export const PEAK_DATA = {
      rec:'Hold',
      sar:{s:'Territory with 3 legacy accounts, quota of $180K.', a:'\u201cWorked my network hard and stayed visible with the big logos.\u201d No activity numbers provided despite prompt.', r:'Finished at 71% of quota; attributed gap to \u201cdead territory.\u201d', l:'Named no behavior change. Said next year \u201cthe territory should turn.\u201d'},
      scores:{a:{sj:4.5,hd:4.5,re:4.0,sa:4.0}, b:{sj:4.0,hd:4.0,re:3.5,sa:2.0}}},
-    {id:'dana', name:'Dana Okafor', anon:'Candidate #1038', role:'Sponsorship Sales Consultant', loc:'San Marcos, TX', school:'UT San Antonio', stage:5, stageLabel:'Combine complete \u00b7 decision pending', readiness:4.4, r1:2.9, r2:4.3, agree:'High', sjt:88, wdi:83, appEv:'High',
+    {id:'dana', name:'Dana Okafor', anon:'Candidate #1038', role:'Entry Level Sales Professional', loc:'San Marcos, TX', school:'UT San Antonio', stage:5, stageLabel:'Combine complete \u00b7 decision pending', readiness:4.4, r1:2.9, r2:4.3, agree:'High', sjt:88, wdi:83, appEv:'High',
      comp:{hd:3.9,sa:4.6,co:4.8,re:4.2,rs:4.7,sj:3.8,de:4.5,it:4.6},
      strength:{sim:'Medium',repitch:'High',case:'High',interview:'High',sjt:'High',app:'High',wdi:'Medium'},
      strongest:'Re-pitch fully integrated the coaching \u2014 rebuilt the opening around the buyer\u2019s stated need and asked for a specific next step. R1\u2192R2 delta +1.4, largest in cohort. (Sim R2, both evaluators)',
@@ -129,17 +127,17 @@ export const PEAK_DATA = {
      rec:'Advance',
      sar:{s:'Campus fundraising role, $8K prior-year baseline, no donor list.', a:'Built a 220-contact list from public directories, ran 25 calls/day, tracked everything in a sheet reviewed each Friday.', r:'$31K raised \u2014 288% of baseline \u2014 in one semester.', l:'\u201cThe list and the Friday review mattered more than any single call.\u201d'},
      scores:{a:{sj:3.0,hd:4.0,re:4.0,sa:4.5}, b:{sj:2.8,hd:3.9,re:4.3,sa:4.6}}},
-    {id:'tyler', name:'Tyler Nguyen', anon:'Candidate #1051', role:'Sponsorship Sales Consultant', loc:'Waco, TX', school:'Baylor', stage:4, stageLabel:'Combine scheduled \u00b7 Thu 2:00 PM', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:78, wdi:76, appEv:'High',
+    {id:'tyler', name:'Tyler Nguyen', anon:'Candidate #1051', role:'Entry Level Sales Professional', loc:'Waco, TX', school:'Baylor', stage:4, stageLabel:'Combine scheduled \u00b7 Thu 2:00 PM', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:78, wdi:76, appEv:'High',
      comp:{hd:3.8,sa:3.6,co:3.9,re:3.7,rs:3.5,sj:3.4,de:3.8,it:4.1},
      strength:{sim:'\u2014',repitch:'\u2014',case:'\u2014',interview:'\u2014',sjt:'High',app:'High',wdi:'Medium'},
      strongest:'Application evidence is specific and quantified across all five questions.', concerns:'\u2014 pending combine.', open:'Run the full combine Thursday.', rec:null, sar:{s:'D2C resale side business started junior year.', a:'Sourced inventory from estate sales, built pricing model, 4 hrs/day around classes.', r:'$18K profit over 14 months.', l:'\u201cConsistency of sourcing beat any single flip.\u201d'}, scores:null},
-    {id:'sofia', name:'Sofia Ramirez', anon:'Candidate #1057', role:'Ticket Sales Consultant', loc:'Lubbock, TX', school:'Texas Tech', stage:2, stageLabel:'Application submitted \u00b7 in review', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:null, wdi:null, appEv:'In review',
+    {id:'sofia', name:'Sofia Ramirez', anon:'Candidate #1057', role:'Director of Service', loc:'Lubbock, TX', school:'Texas Tech', stage:2, stageLabel:'Application submitted \u00b7 in review', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:null, wdi:null, appEv:'In review',
      comp:null, strength:null, strongest:'\u2014', concerns:'\u2014', open:'Application review due Friday.', rec:null, sar:null, scores:null},
-    {id:'jalen', name:'Jalen Brooks', anon:'Candidate #1049', role:'Sponsorship Sales Consultant', loc:'Houston, TX', school:'U of Houston', stage:3, stageLabel:'Work-drive inventory in progress', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:null, wdi:null, appEv:'Medium',
+    {id:'jalen', name:'Jalen Brooks', anon:'Candidate #1049', role:'Director of Sales', loc:'Houston, TX', school:'U of Houston', stage:3, stageLabel:'Work-drive inventory in progress', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:null, wdi:null, appEv:'Medium',
      comp:null, strength:null, strongest:'\u2014', concerns:'\u2014', open:'Awaiting Stage 3\u20134 completion.', rec:null, sar:null, scores:null},
-    {id:'maya', name:'Maya Chen', anon:'Candidate #1063', role:'Sponsorship Sales Consultant', loc:'San Marcos, TX', school:'Texas State', stage:4, stageLabel:'SJT complete \u00b7 awaiting combine', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:81, wdi:74, appEv:'High',
+    {id:'maya', name:'Maya Chen', anon:'Candidate #1063', role:'Entry Level Sales Professional', loc:'San Marcos, TX', school:'Texas State', stage:4, stageLabel:'SJT complete \u00b7 awaiting combine', readiness:null, r1:null, r2:null, agree:'\u2014', sjt:81, wdi:74, appEv:'High',
      comp:null, strength:null, strongest:'Evidence answers quantified on all five questions; strongest on resourcefulness (Q3).', concerns:'\u2014 pending combine.', open:'Schedule the combine.', rec:null, sar:null, scores:null},
-    {id:'priya', name:'Priya Shah', anon:'Candidate #0991', role:'Sponsorship Sales Consultant', loc:'Austin, TX', school:'UT Austin', stage:6, stageLabel:'Hired \u00b7 Cohort 2026-A', readiness:4.1, r1:3.4, r2:4.2, agree:'High', sjt:82, wdi:80, appEv:'High',
+    {id:'priya', name:'Priya Shah', anon:'Candidate #0991', role:'Entry Level Sales Professional', loc:'Austin, TX', school:'UT Austin', stage:6, stageLabel:'Hired \u00b7 Cohort 2026-A', readiness:4.1, r1:3.4, r2:4.2, agree:'High', sjt:82, wdi:80, appEv:'High',
      comp:{hd:4.2,sa:4.3,co:4.4,re:4.0,rs:4.1,sj:3.9,de:4.2,it:4.5},
      strength:{sim:'High',repitch:'High',case:'High',interview:'High',sjt:'High',app:'High',wdi:'Medium'},
      strongest:'Consistent evidence across every source; strongest resourcefulness case in her cohort.', concerns:'None recorded.', open:'\u2014', rec:'Advance', sar:null, scores:null}
@@ -147,13 +145,13 @@ export const PEAK_DATA = {
   funnel: [
     {label:'Applied', n:148}, {label:'RJP acknowledged', n:121}, {label:'Application reviewed', n:64}, {label:'Sales decisions complete', n:41}, {label:'Combine complete', n:18}, {label:'Offers extended', n:6}
   ],
+  // The three hiring profiles. `prop` is only a description here — the school / property a candidate is being hired for is typed per candidate when they are invited.
   roles: [
-    {title:'Sponsorship Sales Consultant', prop:'Texas State Athletics', open:3, apps:62, stage:'Combine week'},
-    {title:'Ticket Sales Consultant', prop:'Texas Tech Athletics', open:2, apps:48, stage:'Application review'},
-    {title:'Partnership Development Manager', prop:'New property launch', open:1, apps:38, stage:'Sourcing'},
-    {title:'Account Manager', prop:'Texas Tech Athletics', open:1, apps:22, stage:'Application review'},
-    {title:'Regional Sales Director', prop:'Peak HQ · Southwest', open:1, apps:14, stage:'Sourcing'}
+    {title:'Entry Level Sales Professional', prop:'Hiring for potential \u2014 raw traits over experience', open:3, apps:62, stage:'Combine week'},
+    {title:'Director of Sales', prop:'Owns a number for a property or market', open:1, apps:38, stage:'Sourcing'},
+    {title:'Director of Service', prop:'Grows the account, not just serves it', open:1, apps:22, stage:'Application review'}
   ],
+  roleOptions: ['Entry Level Sales Professional', 'Director of Sales', 'Director of Service'],
   hires: [
     {name:'Priya Shah', readiness:4.1, d30:{dials:212,mtgs:9,pipe:'$41K',rev:'$0',crm:98,mgr:4.5,coach:'Strong',ret:'Active'}, d60:{dials:198,mtgs:11,pipe:'$88K',rev:'$12K',crm:97,mgr:4.5,coach:'Strong',ret:'Active'}, d90:{dials:205,mtgs:13,pipe:'$121K',rev:'$36K',crm:98,mgr:4.7,coach:'Strong',ret:'Active'}},
     {name:'Jordan Miles', readiness:3.6, d30:{dials:186,mtgs:6,pipe:'$22K',rev:'$0',crm:84,mgr:3.8,coach:'Moderate',ret:'Active'}, d60:{dials:174,mtgs:8,pipe:'$47K',rev:'$8K',crm:88,mgr:4.0,coach:'Moderate',ret:'Active'}, d90:{dials:181,mtgs:9,pipe:'$63K',rev:'$19K',crm:90,mgr:4.0,coach:'Strong',ret:'Active'}},
@@ -180,7 +178,7 @@ export const PEAK_DATA = {
     admin:{label:'Admin', d:'Everything a hiring manager has, plus scheduling, question bank, weights, staff & roles, settings.'},
     leadership:{label:'Leadership / Compliance', d:'Funnel, decision log, calibration, validation, fairness audit, retention & deletion. Read-only on candidates.'}
   },
-  invite: {name:'Alex Carter', first:'Alex', role:'Sponsorship Sales Consultant', prop:'Texas State Athletics', due:'Fri, Sep 11', session:'Thu, Sep 10 · 2:00 PM CT', link:'meet.peaksportsmgmt.com/combine-1064'},
+  invite: {name:'Alex Carter', first:'Alex', role:'Entry Level Sales Professional', prop:'Texas State Athletics', due:'Fri, Sep 11', session:'Thu, Sep 10 · 2:00 PM CT', link:'meet.peaksportsmgmt.com/combine-1064', track:'assessment'},
   sessions: [
     {candId:'tyler', cand:'Tyler Nguyen', when:'Thu, Sep 10 · 2:00 PM CT', evals:'R. Delgado + J. Whitfield', link:'meet.peaksportsmgmt.com/combine-1051', ver:'v1.2'}
   ],
@@ -200,19 +198,19 @@ export const PEAK_DATA = {
     ]
   },
   decisions: [
-    {candId:'marcus', cand:'Marcus Reeves', role:'Sponsorship Sales Consultant', decision:'Hold', by:'R. Delgado (Hiring manager)', t:'Tue 4:30 PM', rationale:'Self-Accountability flag open (Whitfield 4.0 vs. Delgado 2.0). Interview Q2 and Evidence Q2 both show no owned portion of the missed Q3 target. Decision deferred until the calibration discussion Thursday and one follow-through reference.', agree:'Flagged'},
-    {candId:'priya', cand:'Priya Shah', role:'Sponsorship Sales Consultant', decision:'Advance', by:'R. Delgado (Hiring manager)', t:'Aug 28 · 11:05 AM', rationale:'Readiness 4.1. Both evaluators within 0.5 on every competency. Strongest resourcefulness case in cohort 2026-A; consistent evidence across application, SJT, and both combine exercises. Offer extended; start with cohort 2026-A.', agree:'High'}
+    {candId:'marcus', cand:'Marcus Reeves', role:'Entry Level Sales Professional', decision:'Hold', by:'R. Delgado (Hiring manager)', t:'Tue 4:30 PM', rationale:'Self-Accountability flag open (Whitfield 4.0 vs. Delgado 2.0). Interview Q2 and Evidence Q2 both show no owned portion of the missed Q3 target. Decision deferred until the calibration discussion Thursday and one follow-through reference.', agree:'Flagged'},
+    {candId:'priya', cand:'Priya Shah', role:'Entry Level Sales Professional', decision:'Advance', by:'R. Delgado (Hiring manager)', t:'Aug 28 · 11:05 AM', rationale:'Readiness 4.1. Both evaluators within 0.5 on every competency. Strongest resourcefulness case in cohort 2026-A; consistent evidence across application, SJT, and both combine exercises. Offer extended; start with cohort 2026-A.', agree:'High'}
   ],
   accoms: [
     {id:'a1', candId:'jalen', cand:'Jalen Brooks · Candidate #1049', t:'Yesterday 6:12 PM', txt:'I use a screen reader. Can you confirm the inventory and scenarios work with it, and can I have extra time on anything timed?', status:'Open'},
     {id:'a2', candId:'tyler', cand:'Tyler Nguyen · Candidate #1051', t:'Aug 30', txt:'I have a documented processing disability and am requesting extended preparation time for the live exercise.', status:'Approved', resolution:'+50% prep time on Exercise A (7:30 instead of 5:00). The cockpit timer adjusts automatically; evaluators see only “accommodation in place” — never the reason.'}
   ],
   weightsByRole: {
-    'Sponsorship Sales Consultant': {sim:25,repitch:15,case:15,interview:20,sjt:15,app:5,wdi:5},
-    'Ticket Sales Consultant': {sim:30,repitch:15,case:10,interview:20,sjt:15,app:5,wdi:5},
-    'Partnership Development Manager': {sim:20,repitch:10,case:25,interview:25,sjt:10,app:5,wdi:5},
-    'Account Manager': {sim:20,repitch:10,case:20,interview:25,sjt:15,app:5,wdi:5},
-    'Regional Sales Director': {sim:15,repitch:10,case:25,interview:30,sjt:10,app:5,wdi:5}
+    'Entry Level Sales Professional': {sim:25,repitch:15,case:15,interview:25,sjt:20},
+    'Director of Sales': {sim:20,repitch:10,case:25,interview:30,sjt:15},
+    'Director of Service': {sim:20,repitch:10,case:20,interview:30,sjt:20}
   },
-  profileByRole: {'Sponsorship Sales Consultant':'entry','Ticket Sales Consultant':'entry','Partnership Development Manager':'senior','Regional Sales Director':'senior','Account Manager':'service'}
+  // Role → Sales Decisions profile. Legacy titles stay mapped so candidates invited under the old names still score.
+  profileByRole: {'Entry Level Sales Professional':'entry','Director of Sales':'senior','Director of Service':'service',
+    'Sponsorship Sales Consultant':'entry','Ticket Sales Consultant':'entry','Partnership Development Manager':'senior','Regional Sales Director':'senior','Account Manager':'service'}
 };

@@ -5,12 +5,15 @@ import React from 'react';
 import { Template } from './template/Template';
 import { PEAK_DATA } from './data/seed';
 import { PEAK_BANK } from './data/bank';
-import { LIVE_ENABLED, LiveStore, sb, fmtDate, fmtT } from './data/live';
+import { LIVE_ENABLED, LiveStore, sb, fmtDate, fmtT, whenTxt, TZ_OPTIONS, TZ_SHORT } from './data/live';
 
 const STORAGE_KEY = 'peak-sales-combine-v3';
-const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr']; // never persisted
+const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr', 'resumeMsg', 'caseMsg']; // never persisted
 const UI_KEYS = ['blind', 'weightsRole', 'vPeriod']; // the only local state kept between visits in live mode
-const CAND_KEYS = ['done', 'ack', 'challenge', 'app', 'ev', 'bkIdx', 'bkAns', 'caseAns', 'caseMode', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched']; // candidate progress synced to the database
+const CAND_KEYS = ['done', 'ack', 'challenge', 'app', 'ev', 'bkIdx', 'bkAns', 'caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'infoDone']; // candidate progress synced to the database
+const COMBINE_KEYS = ['caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'done']; // the subset a combine link may change
+const DEFAULT_ROLE = 'Entry Level Sales Professional';
+const TR_KINDS = ['Mock pitch (Exercise A)', 'Phone screen', 'Interview', 'Other'];
 
 function loadState() {
   try {
@@ -33,13 +36,13 @@ function saveState(s: any) {
 }
 
 export class PeakCombine extends React.Component<any, any> {
-  _t: any; live: any; token: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any;
+  _t: any; live: any; token: any; combineToken: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any;
   constructor(props: any) {
     super(props);
     const saved = loadState();
     if (saved) this.state = {...this.state, ...saved};
     this.live = LIVE_ENABLED ? new LiveStore() : null;
-    this.token = null; this.candInfo = null; this.hydrating = false; this.pendingPatch = null; this.saveChain = null; this.settingsDirty = {}; this.pendingWrites = 0; this._entering = false; this._pwSetup = false;
+    this.token = null; this.combineToken = null; this.candInfo = null; this.hydrating = false; this.pendingPatch = null; this.saveChain = null; this.settingsDirty = {}; this.pendingWrites = 0; this._entering = false; this._pwSetup = false;
   }
   state = {
     mode: null, user: null, role: null, invite: 'valid', viewAs: null, resent: false,
@@ -47,8 +50,9 @@ export class PeakCombine extends React.Component<any, any> {
     cview: 'dash', eview: 'roster', aview: 'funnel',
     done: {s1:false,s2:false,s3:false,s4:false,s5a:false,s5b:false},
     ack: false, challenge: '', accomOpen: false, accomTxt: '', accomSent: false, consentRec: false, resched: false, withdrawn: false,
-    app: {name:'',email:'',phone:'',loc:'',linkedin:'',role:'Sponsorship Sales Consultant',auth:null,resume:false,consent:false},
+    app: {name:'',email:'',phone:'',loc:'',school:'',linkedin:'',role:DEFAULT_ROLE,auth:null,resume:false,consent:false},
     ev: ['','','','',''],
+    infoDone: false, resumeMsg: '', caseMsg: '', caseFile: null,
     bkIdx: 0, bkAns: {}, bankSettings: null,
     recorded: false,
     caseAns: ['','','','','','',''], caseMode: 'Written',
@@ -58,16 +62,17 @@ export class PeakCombine extends React.Component<any, any> {
     blind: false, profileId: 'dana', cmpA: null, cmpB: null,
     arId: 'sofia', arRatings: {}, arSaved: '', arDone: {},
     dec: {rec:null, note:''}, decisions: [],
-    sch: {cand:'maya', date:'Tue, Sep 15', time:'10:00 AM', e1:'delgado', e2:'whitfield', link:'', sent:''}, scheduled: [],
+    sch: {cand:'maya', date:'', time:'10:00', tz:'America/Chicago', dur:60, e1:'delgado', e2:'whitfield', link:'', sent:'', msg:'', warn:[]}, scheduled: [],
     inv: {name:'', email:'', roles:{}, saved:''}, invited: [], deactivated: {},
     accomState: {},
     oc: {open:false, hire:'Alexis Grant', period:'d90', vals:{}, saved:''}, ocRows: {},
-    weightsRole: 'Sponsorship Sales Consultant', weightsByRole: null,
+    weightsRole: DEFAULT_ROLE, weightsByRole: null,
     bankIdx: 0, bank: null, savedNote: '',
     vPeriod: 'd30', retention: '24 months',
     // live mode
     liveCand: null, pwSetup: false, pw1: '', pw2: '', pwMsg: '', busy: '', flash: {}, resentTo: '', resentErr: '', saveErr: '',
-    newCand: {name:'', email:'', phone:'', role:'Sponsorship Sales Consultant', saved:''}
+    newCand: {name:'', email:'', phone:'', role:DEFAULT_ROLE, program:'', loc:'', school:'', linkedin:'', track:'assessment', file:null, saved:''},
+    tr: {kind:TR_KINDS[0], title:'', txt:'', fileName:'', msg:''}, trOpen: false, trShow: {}, rpItemsOpen: false, notesDraft: null
   };
   componentDidMount() {
     const D = PEAK_DATA;
@@ -103,6 +108,8 @@ export class PeakCombine extends React.Component<any, any> {
     const q = new URLSearchParams(window.location.search);
     const token = q.get('invite');
     if (token) { this.token = token; this.setState({mode:'candidate', invite:'loading', viewAs:null}); this.openCandidate(token); return; }
+    const ctoken = q.get('combine');
+    if (ctoken) { this.combineToken = ctoken; this.setState({mode:'candidate', invite:'loading', viewAs:null}); this.openCombine(ctoken); return; }
     const hash = window.location.hash || '';
     if (/error_description=/.test(hash)) {
       let msg = 'That link is no longer valid. Use \u201cForgot password\u201d to get a new one.';
@@ -143,7 +150,10 @@ export class PeakCombine extends React.Component<any, any> {
     (L.raw.reviews || []).forEach(r => { if (!(r.candidate_id in first)) first[r.candidate_id] = r.outcome === 'advanced' ? 'Advanced to Stage 3 \u00b7 evidence ' + r.level : 'Not advanced \u00b7 application stage'; });
     o.arDone = first;
     const dirty = this.settingsDirty || {};
-    if (!('weightsByRole' in dirty)) o.weightsByRole = S.weightsByRole || JSON.parse(JSON.stringify(PEAK_DATA.weightsByRole || {}));
+    const defaultsW = JSON.parse(JSON.stringify(PEAK_DATA.weightsByRole || {}));
+    // Saved weights are merged onto the current role list so renamed roles and removed sources never leave stale keys behind.
+    const mergedW = Object.fromEntries(Object.keys(defaultsW).map(r => { const saved = (S.weightsByRole || {})[r] || {}; const o2 = {}; Object.keys(defaultsW[r]).forEach(k => { o2[k] = saved[k] != null ? saved[k] : defaultsW[r][k]; }); return [r, o2]; }));
+    if (!('weightsByRole' in dirty)) o.weightsByRole = mergedW;
     if (!('bankSettings' in dirty)) o.bankSettings = S.bankSettings || null;
     if (!('retention' in dirty)) o.retention = S.retention || '24 months';
     if (!('bankEdits' in dirty)) o.bank = ((S.bankEdits || {})[this.currentProfileId()]) || null;
@@ -152,10 +162,13 @@ export class PeakCombine extends React.Component<any, any> {
     const sch = {...st.sch}; let changed = false;
     if (!evals.some(u => u.id === sch.e1)) { sch.e1 = evals[0] ? evals[0].id : ''; changed = true; }
     if (!evals.some(u => u.id === sch.e2) || sch.e2 === sch.e1) { const alt = evals.find(u => u.id !== sch.e1); sch.e2 = alt ? alt.id : ''; changed = true; }
-    const pending = V.candidates.filter(c => c.stage === 4 && !c.hasSession);
+    const pending = V.candidates.filter(c => c.canSchedule);
     if (!pending.some(c => c.id === sch.cand)) { sch.cand = pending[0] ? pending[0].id : ''; changed = true; }
     if (sch.link === undefined) { sch.link = ''; changed = true; }
+    if (!sch.tz) { sch.tz = 'America/Chicago'; changed = true; }
+    if (!sch.dur) { sch.dur = 60; changed = true; }
     if (changed) o.sch = sch;
+    if (!Object.keys(defaultsW).includes(st.weightsRole)) o.weightsRole = DEFAULT_ROLE;
     if (V.hires.length && !V.hires.some(h => h.name === st.oc.hire)) o.oc = {...st.oc, hire: V.hires[0].name};
     if (V.candidates.length && !V.candidates.some(c => c.id === st.profileId)) o.profileId = V.candidates[0].id;
     if (V.candidates.length && !V.candidates.some(c => c.id === st.arId)) o.arId = V.candidates[0].id;
@@ -180,17 +193,43 @@ export class PeakCombine extends React.Component<any, any> {
     this.live.refreshSoon();
   }
   // ---- candidate (personal link) ----
+  candInfoFrom(c, r, extra) {
+    const roleRow = ((PEAK_DATA && PEAK_DATA.roles) || []).find(x => x.title === c.role) || {};
+    const dec = r.decision === 'Advance' ? 'Advance' : r.decision === 'Do Not Advance' ? 'Decline' : 'none';
+    const s = r.session || null;
+    return {name: c.name || 'Candidate', first: (c.name || 'there').split(' ')[0], role: c.role || '', prop: c.program || 'Peak Sports MGMT', due: fmtDate(c.expires_at) || '\u2014',
+      session: s ? s.when : 'Not yet scheduled', link: (s && s.link) || '\u2014', startsAt: s ? s.starts_at : null, combineLink: s && s.token ? window.location.origin + '/?combine=' + s.token : '',
+      hasSession: !!s, decision: dec, track: c.track || 'assessment', source: c.source || 'invite', resumeName: c.resume_name || '',
+      decisionTxt: 'Two evaluators independently reviewed your combine, interview, and evidence. A member of the Peak Sports MGMT team will contact you within two business days about next steps.', ...(extra || {})};
+  }
   async openCandidate(token) {
     try {
       const r = await this.live.candidateOpen(token);
       if (!r || r.status === 'invalid') { this.setState({invite:'invalid'}); return; }
       if (r.status === 'expired') { this.setState({invite:'expired', resent:false, resentTo: r.email || 'your email'}); return; }
       const c = r.candidate || {}, P = r.progress || {};
-      const roleRow = ((PEAK_DATA && PEAK_DATA.roles) || []).find(x => x.title === c.role) || {};
-      const dec = r.decision === 'Advance' ? 'Advance' : r.decision === 'Do Not Advance' ? 'Decline' : 'none';
-      this.candInfo = {name: c.name || 'Candidate', first: (c.name || 'there').split(' ')[0], role: c.role || '', prop: roleRow.prop || 'Peak Sports MGMT', due: fmtDate(c.expires_at) || '\u2014', session: r.session ? r.session.when : 'Not yet scheduled', link: (r.session && r.session.link) || '\u2014', decision: dec, decisionTxt: 'Two evaluators independently reviewed your combine, interview, and evidence. A member of the Peak Sports MGMT team will contact you within two business days about next steps.'};
-      const base: any = {mode:'candidate', invite:'valid', viewAs:null, cview:'dash', resched:false};
+      this.candInfo = this.candInfoFrom(c, r);
+      const info = this.candInfo.track === 'info';
+      const base: any = {mode:'candidate', invite:'valid', viewAs:null, cview: info ? (P.infoDone ? 'infodone' : 'info') : 'dash', resched:false};
       CAND_KEYS.forEach(k => { if (P[k] !== undefined && P[k] !== null) base[k] = P[k]; });
+      // Contact details start from what staff entered; anything the candidate already typed wins.
+      const savedApp = P.app || {};
+      base.app = {...this.state.app, name:c.name || '', email:c.email || '', phone:c.phone || '', loc:c.loc || '', school:c.school || '', linkedin:c.linkedin || '', role:c.role || DEFAULT_ROLE, resume: c.resume_name ? {name:c.resume_name} : false, ...savedApp};
+      if (r.evaluations > 0) base.done = {...(base.done || this.state.done), s5a:true};
+      this.hydrating = true;
+      this.setState(base, () => { this.hydrating = false; });
+    } catch (e) { this.setState({invite:'invalid', saveErr: (e && e.message) || ''}); }
+  }
+  // ---- candidate (combine link: the live session, Exercise B, recording notice) ----
+  async openCombine(token) {
+    try {
+      const r = await this.live.combineOpen(token);
+      if (!r || r.status === 'invalid') { this.setState({invite:'invalid'}); return; }
+      if (r.status === 'expired') { this.setState({invite:'cexpired'}); return; }
+      const c = r.candidate || {}, P = r.progress || {};
+      this.candInfo = this.candInfoFrom(c, r, {due:'\u2014'});
+      const base: any = {mode:'candidate', invite:'valid', viewAs:null, cview:'s5', resched:false};
+      COMBINE_KEYS.forEach(k => { if (P[k] !== undefined && P[k] !== null) base[k] = P[k]; });
       if (r.evaluations > 0) base.done = {...(base.done || this.state.done), s5a:true};
       this.hydrating = true;
       this.setState(base, () => { this.hydrating = false; });
@@ -200,16 +239,34 @@ export class PeakCombine extends React.Component<any, any> {
   flushSave() {
     clearTimeout(this.saveT);
     const patch = this.pendingPatch; this.pendingPatch = null;
-    if (!patch || !this.token) return this.saveChain || Promise.resolve();
-    const token = this.token;
-    this.saveChain = (this.saveChain || Promise.resolve()).then(() => this.live.candidateSave(token, patch)).then(r => {
+    if (!patch || (!this.token && !this.combineToken)) return this.saveChain || Promise.resolve();
+    const token = this.token, ctoken = this.combineToken;
+    const save = () => ctoken ? this.live.combineSave(ctoken, patch) : this.live.candidateSave(token, patch);
+    this.saveChain = (this.saveChain || Promise.resolve()).then(save).then(r => {
       if (r && r.status === 'invalid') this.setState({saveErr:'This link is no longer valid \u2014 your last change was not saved.'});
       else if (this.state.saveErr) this.setState({saveErr:''});
     }, () => { this.setState({saveErr:'Could not save \u2014 check your connection and try again.'}); });
     return this.saveChain;
   }
-  scoreSoon() { const t = this.token; this.flushSave().then(() => this.live.score(t)).catch(() => {}); }
+  scoreSoon() { const t = this.token; if (!t) return; this.flushSave().then(() => this.live.score(t)).catch(() => {}); }
   async candidateExit() { await this.flushSave(); this.setState({invite:'saved'}); }
+  // ---- candidate file uploads (résumé in Stage 2 / details form; Exercise B deck or video on the combine page) ----
+  async pickResume(e) {
+    const file = e && e.target && e.target.files && e.target.files[0]; if (!file) return;
+    if (!LIVE_ENABLED) { this.setState({app:{...this.state.app, resume:{name:file.name}}, resumeMsg:''}); return; }
+    this.setState({resumeMsg:'Uploading ' + file.name + '\u2026'});
+    try { const r = await this.live.uploadFile({token:this.token, purpose:'resume', file}); this.setState({app:{...this.state.app, resume:{name:r.name || file.name, path:r.path}}, resumeMsg:''}); }
+    catch (err) { this.setState({resumeMsg:'Could not upload: ' + ((err && err.message) || err)}); }
+    try { e.target.value = ''; } catch (x) {}
+  }
+  async pickCaseFile(e) {
+    const file = e && e.target && e.target.files && e.target.files[0]; if (!file) return;
+    if (!LIVE_ENABLED) { this.setState({caseFile:{name:file.name}, caseMsg:''}); return; }
+    this.setState({caseMsg:'Uploading ' + file.name + '\u2026'});
+    try { const r = await this.live.uploadFile({token:this.token, combineToken:this.combineToken, purpose:'case', file}); this.setState({caseFile:{name:r.name || file.name, path:r.path}, caseMsg:''}); }
+    catch (err) { this.setState({caseMsg:'Could not upload: ' + ((err && err.message) || err)}); }
+    try { e.target.value = ''; } catch (x) {}
+  }
   async resendOwnLink() {
     this.setState({busy:'resend'});
     try { await this.live.resendForToken(this.token); this.setState({resent:true, resentErr:''}); }
@@ -250,33 +307,66 @@ export class PeakCombine extends React.Component<any, any> {
   // ---- staff actions ----
   flashFor(id, msg) { this.setState({flash:{...this.state.flash, [id]:msg}}); }
   async copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { return false; } }
-  async createCandidate(sendEmail) {
+  // mode: 'email' (create + email the link) · 'copy' (create + copy the link) · 'manual' (add to the pipeline, send nothing)
+  async createCandidate(mode) {
     const f = this.state.newCand;
     if (f.name.trim().length < 2 || !/@/.test(f.email)) return;
     this.setState({busy:'invite'});
     try {
-      const row = await this.live.createCandidate({name:f.name.trim(), email:f.email.trim().toLowerCase(), phone:f.phone.trim(), role:f.role});
-      let msg;
-      if (sendEmail) { const r = await this.live.sendInvite(row.id); msg = 'Invite emailed to ' + row.email + ' \u00b7 link expires ' + fmtDate(r.expires) + '.'; }
-      else { const r = await this.live.extendInvite(row.id); const ok = await this.copyText(r.link); msg = (ok ? 'Created \u00b7 link copied: ' : 'Created \u00b7 link: ') + r.link; }
+      const row = await this.live.createCandidate({name:f.name.trim(), email:f.email.trim().toLowerCase(), phone:f.phone.trim(), role:f.role, program:f.program.trim(), loc:f.loc.trim(), school:f.school.trim(), linkedin:f.linkedin.trim(), track:f.track, source: mode === 'manual' ? 'manual' : 'invite'});
+      let msg = 'Added to the pipeline';
+      if (f.file) { try { const up = await this.live.uploadFile({candidateId:row.id, purpose:'resume', file:f.file}); msg += ' \u00b7 r\u00e9sum\u00e9 ' + up.name + ' attached'; } catch (e) { msg += ' \u00b7 r\u00e9sum\u00e9 upload failed: ' + ((e && e.message) || e); } }
+      const what = f.track === 'info' ? 'details link' : 'assessment link';
+      if (mode === 'email') { const r = await this.live.sendInvite(row.id); msg += ' \u00b7 ' + what + ' emailed to ' + row.email + ' \u00b7 expires ' + fmtDate(r.expires) + '.'; }
+      else if (mode === 'copy') { const r = await this.live.extendInvite(row.id); const ok = await this.copyText(r.link); msg += (ok ? ' \u00b7 ' + what + ' copied: ' : ' \u00b7 ' + what + ': ') + r.link; }
+      else msg += ' \u00b7 no link sent. Use \u201cEmail link\u201d on the row when you\u2019re ready.';
       await this.live.refresh();
-      this.setState({newCand:{name:'', email:'', phone:'', role:f.role, saved:msg}});
+      this.setState({newCand:{name:'', email:'', phone:'', role:f.role, program:f.program, loc:'', school:'', linkedin:'', track:f.track, file:null, saved:msg}});
     } catch (e) { this.setState({newCand:{...this.state.newCand, saved:'Could not finish: ' + ((e && e.message) || e)}}); }
     this.setState({busy:''});
   }
-  async sendInviteTo(c) {
+  async sendInviteTo(c, track) {
     this.flashFor(c.id, 'Sending\u2026');
-    try { const r = await this.live.sendInvite(c.id); await this.live.refresh(); this.flashFor(c.id, 'Invite emailed \u00b7 expires ' + fmtDate(r.expires)); }
+    try { const r = await this.live.sendInvite(c.id, track); await this.live.refresh(); this.flashFor(c.id, (r.track === 'info' ? 'Details link' : 'Assessment link') + ' emailed \u00b7 expires ' + fmtDate(r.expires)); }
     catch (e) { this.flashFor(c.id, 'Email failed: ' + ((e && e.message) || e) + ' \u2014 use Copy link.'); }
   }
-  async copyLinkFor(c) {
-    try { const r = await this.live.extendInvite(c.id); await this.live.refresh(); const ok = await this.copyText(r.link); this.flashFor(c.id, (ok ? 'Link copied \u00b7 expires in 3 days: ' : 'Link (expires in 3 days): ') + r.link); }
+  async copyLinkFor(c, track) {
+    try { const r = await this.live.extendInvite(c.id, track); await this.live.refresh(); const ok = await this.copyText(r.link); this.flashFor(c.id, (ok ? 'Link copied \u00b7 expires in 3 days: ' : 'Link (expires in 3 days): ') + r.link); }
     catch (e) { this.flashFor(c.id, 'Could not refresh the link: ' + ((e && e.message) || e)); }
   }
   async rescoreCandidate(id) {
     this.flashFor('score:' + id, 'Scoring\u2026');
     try { const r = await this.live.rescore(id); await this.live.refresh(); this.flashFor('score:' + id, 'Scored \u00b7 ' + r.overall + '/100 \u00b7 ' + r.band); }
     catch (e) { this.flashFor('score:' + id, 'Could not score: ' + ((e && e.message) || e)); }
+  }
+  async openFile(candidateId, path) {
+    try { const r = await this.live.fileLink(candidateId, path); window.open(r.url, '_blank', 'noopener'); }
+    catch (e) { this.flashFor('file:' + candidateId, 'Could not open the file: ' + ((e && e.message) || e)); }
+  }
+  async saveNotes(candidateId) {
+    const txt = this.state.notesDraft; if (txt == null) return;
+    const r = await this.write(() => this.live.updateCandidate(candidateId, {notes: txt}), 'err');
+    if (r.ok) this.setState({notesDraft:null});
+  }
+  async submitTranscript(candidateId) {
+    const t = this.state.tr;
+    if (!candidateId || t.txt.trim().length < 200) { this.setState({tr:{...t, msg:'Paste or upload at least a few paragraphs (200 characters minimum).'}}); return; }
+    this.setState({busy:'tr', tr:{...t, msg:'Saving' + '\u2026 the review can take up to a minute.'}});
+    try {
+      const r = await this.live.addTranscript({candidateId, kind:t.kind, title:t.title.trim(), txt:t.txt, sourceName:t.fileName});
+      await this.live.refresh();
+      const note = r.status === 'done' ? 'Saved \u00b7 advisory read ready below.' : r.status === 'off' ? 'Saved \u00b7 evaluators can read it below (AI-assisted read is not switched on).' : r.status === 'failed' ? 'Saved \u00b7 the AI-assisted read failed: ' + ((r.review && r.review.error) || 'unknown error') : 'Saved.';
+      this.setState({tr:{kind:t.kind, title:'', txt:'', fileName:'', msg:note}, trOpen:false, trShow:{...this.state.trShow, [r.id]:true}});
+    } catch (e) { this.setState({tr:{...this.state.tr, msg:'Could not save: ' + ((e && e.message) || e)}}); }
+    this.setState({busy:''});
+  }
+  readTranscriptFile(e) {
+    const file = e && e.target && e.target.files && e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => this.setState({tr:{...this.state.tr, txt:String(reader.result || ''), fileName:file.name, msg:''}});
+    reader.onerror = () => this.setState({tr:{...this.state.tr, msg:'Could not read that file.'}});
+    reader.readAsText(file);
+    try { e.target.value = ''; } catch (x) {}
   }
   async toggleStaff(u) {
     if (this.state.user && u.id === this.state.user.id) { this.flashFor('users', 'You can\u2019t deactivate your own account.'); return; }
@@ -315,7 +405,8 @@ export class PeakCombine extends React.Component<any, any> {
     v.texture = this.props.showTexture ?? true;
     const users = D.users || [], roleDefs = D.roleDefs || {};
     const user = st.user, roles = user ? user.roles : [];
-    const inv = D.invite || {first:'Alex', name:'Alex Carter', role:'Sponsorship Sales Consultant', prop:'Texas State Athletics', due:'Fri, Sep 11', session:'Thu, Sep 10 · 2:00 PM CT', link:'meet.peaksportsmgmt.com/combine-1064'};
+    const inv = D.invite || {first:'Alex', name:'Alex Carter', role:DEFAULT_ROLE, prop:'Texas State Athletics', due:'Fri, Sep 11', session:'Thu, Sep 10 · 2:00 PM CT', link:'meet.peaksportsmgmt.com/combine-1064', track:'assessment', hasSession:true};
+    const isCombine = !!this.combineToken, isInfo = !isCombine && inv.track === 'info';
     const roleLabel = r => (roleDefs[r] || {}).label || r;
     const B = PEAK_BANK || null;
     const profIdFor = role => (D.profileByRole || {})[role] || 'entry';
@@ -323,7 +414,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.isEntry = !st.mode; v.inApp = !!st.mode;
     v.viewingAs = !!st.viewAs;
     v.inviteExpired = st.mode === 'candidate' && st.invite === 'expired';
-    v.isDemo = true; v.inviteLoading = false; v.inviteSaved = false; v.inviteInvalid = false; v.pwSetup = false; v.busy = false; v.loginInfo = ''; v.saveErr = ''; v.flashErr = ''; v.showInviteForm = false; v.pipeEmpty = false; v.noSessions = false; v.inboxEmpty = false; v.validEmpty = false; v.pNeedsScore = false; v.schLinkEditable = false; v.joinHref = '';
+    v.isDemo = true; v.inviteLoading = false; v.inviteSaved = false; v.inviteInvalid = false; v.combineExpired = false; v.pwSetup = false; v.busy = false; v.loginInfo = ''; v.saveErr = ''; v.flashErr = ''; v.showInviteForm = false; v.pipeEmpty = false; v.noSessions = false; v.inboxEmpty = false; v.validEmpty = false; v.pNeedsScore = false; v.rpNeedsEvidence = false; v.schLinkEditable = false; v.schBusy = false; v.joinHref = ''; v.trEnabled = false; v.liveTranscripts = []; v.pTranscripts = [];
     v.isCand = (st.mode === 'candidate' && st.invite === 'valid') || v.viewingAs;
     v.isEval = st.mode === 'staff' && st.role === 'evaluator' && !v.viewingAs;
     v.isStaff = st.mode === 'staff' && (isMgr || isLead) && !v.viewingAs;
@@ -352,12 +443,12 @@ export class PeakCombine extends React.Component<any, any> {
     const accomApproved = candId => { const a = seededAccoms.find(x => x.candId === candId); if (!a) return false; const ov = st.accomState[a.id]; return (ov ? ov.status : a.status) === 'Approved'; };
     const tylerAccom = accomApproved(LIVE_ENABLED ? st.liveCand : 'tyler');
     const tab = (label, on, active) => ({label, go:on, bg: active ? 'rgba(16,185,129,.12)' : 'transparent', fg: active ? GL : '#8FA396'});
-    if (v.isCand) v.navTabs = [tab('My assessment', () => this.setState({cview:'dash'}), true)];
+    if (v.isCand) v.navTabs = [tab(isCombine ? 'My combine' : isInfo ? 'My details' : 'My assessment', () => this.setState({cview: isCombine ? 's5' : isInfo ? (this.state.infoDone ? 'infodone' : 'info') : 'dash'}), true)];
     else if (v.isEval) v.navTabs = [tab('Sessions', () => this.setState({eview:'roster'}), st.eview === 'roster'), tab('Live combine', () => this.setState({eview:'live'}), st.eview === 'live'), tab('Interviews', () => this.setState({eview:'ivlist'}), st.eview === 'ivlist' || st.eview === 'ivcard')];
     else if (v.isStaff) {
       const A = (label, id, alias) => tab(label, () => this.setState({aview:id}), st.aview === id || (alias || []).includes(st.aview));
       const T = [A('Funnel','funnel'), A('Pipeline','pipe',['profile','compare','appreview'])];
-      if (isAdminRole) T.push(A('Schedule','schedule'));
+      if (isMgr) T.push(A('Schedule','schedule'));
       if (isMgr) T.push(A('Inbox','inbox'));
       T.push(A('Decisions','decisions'));
       if (isAdminRole) { T.push(A('Question bank','bank')); T.push(A('Weights','weights')); }
@@ -370,31 +461,34 @@ export class PeakCombine extends React.Component<any, any> {
     // ===== candidate =====
     const stageDone = n => ({s1:n >= 2, s2:n >= 2, s3:n >= 4, s4:n >= 4, s5a:n >= 5, s5b:n >= 5});
     const done = vaCand ? (vaCand.done || stageDone(vaCand.stage)) : st.done, s5Done = done.s5a && done.s5b;
-    const propFor = role => ((D.roles || []).find(r => r.title === role) || {}).prop || inv.prop;
+    const ap = st.app;
+    v.isCombine = isCombine; v.isInfo = isInfo;
     v.candFirst = vaCand ? vaCand.name.split(' ')[0] : inv.first;
-    v.candRoleLine = (vaCand ? vaCand.role : inv.role) + ' · ' + propFor(vaCand ? vaCand.role : inv.role);
-    v.candDue = inv.due; v.candSession = inv.session; v.candLink = inv.link; v.joinDisabled = true;
+    v.candRoleLine = (vaCand ? vaCand.role : inv.role) + ' · ' + (vaCand ? (vaCand.program || 'Peak Sports MGMT') : inv.prop);
+    v.candDue = inv.due; v.candSession = inv.session; v.candLink = inv.link; v.joinDisabled = true; v.candHasSession = !!inv.hasSession;
+    v.combineHref = inv.combineLink || '';
     const mobile = this.props.mobilePreview ?? false;
     v.candMax = mobile ? '400px' : '860px'; v.candFrame = mobile ? '1px solid rgba(160,190,170,.18)' : 'none';
     v.candPE = v.viewingAs ? 'none' : 'auto';
-    v.vDash = st.cview==='dash'; v.vS1 = st.cview==='s1'; v.vS2 = st.cview==='s2'; v.vS3 = st.cview==='s3'; v.vS4 = st.cview==='s4';
-    v.vS5 = st.cview==='s5'; v.vS5a = st.cview==='s5a'; v.vS5b = st.cview==='s5b';
-    v.goDash = () => this.setState({cview:'dash'});
+    const cv = st.cview;
+    v.vDash = !isCombine && !isInfo && cv === 'dash'; v.vS1 = cv === 's1'; v.vS2 = cv === 's2' || (isInfo && (cv === 'info' || cv === 'dash')); v.vS3 = cv === 's3'; v.vFinished = cv === 'finished';
+    v.vInfoDone = isInfo && cv === 'infodone';
+    v.vS5 = cv === 's5'; v.vS5a = cv === 's5a'; v.vS5b = cv === 's5b';
+    v.goDash = () => this.setState({cview: isCombine ? 's5' : isInfo ? 'info' : 'dash'});
     v.goS5 = () => this.setState({cview:'s5'});
     const defs = [
-      {n:'01', title:'Welcome & Realistic Job Preview', time:'10 min', k:'s1', view:'s1'},
-      {n:'02', title:'Evidence-Based Application', time:'25\u201340 min', k:'s2', view:'s2'},
-      {n:'03', title:'Sales Decisions', time:'15 min', k:'s3', view:'s3'},
-      {n:'04', title:'Sales Combine \u2014 Exercises A & B', time:'60 min', k:'s5', view:'s5'}
+      {n:'01', title:'Welcome & Realistic Job Preview', time:'3 min', k:'s1', view:'s1'},
+      {n:'02', title:'Your details & résumé', time:'5 min', k:'s2', view:'s2'},
+      {n:'03', title:'Sales Decisions', time:'15 min', k:'s3', view:'s3'}
     ];
-    const isDone = k => k==='s5' ? s5Done : done[k];
+    const isDone = k => !!done[k];
     v.stages = defs.map((d, i) => {
       const dn = isDone(d.k);
       const locked = i > 0 && !isDone(defs[i-1].k);
-      const started = d.k==='s3' ? Object.keys(st.bkAns).length > 0 : d.k==='s5' ? (done.s5a||done.s5b||st.consentRec) : false;
+      const started = d.k === 's3' ? Object.keys(st.bkAns).length > 0 : d.k === 's1' ? (st.ack || !!st.challenge) : d.k === 's2' ? (!!ap.resume || ap.auth !== null || !!ap.consent) : false;
       return {
         n:d.n, title:d.title, time:d.time,
-        status: dn ? 'Complete' : locked ? 'Locked' : (d.k === 's5' && done.s5b) ? 'Case in · live ' + inv.session.split(' · ')[0] : started ? 'In progress' : 'Not started',
+        status: dn ? 'Complete' : locked ? 'Locked' : started ? 'In progress' : 'Not started',
         statusColor: dn ? GL : locked ? '#4A554D' : started ? AMB : DIM,
         border: dn ? 'rgba(16,185,129,.3)' : 'rgba(160,190,170,.13)',
         numColor: dn ? GL : DIM,
@@ -405,61 +499,66 @@ export class PeakCombine extends React.Component<any, any> {
       };
     });
     const nDone = defs.filter(d => isDone(d.k)).length;
-    v.progressPct = Math.round(nDone/4*100) + '%';
-    v.progressTxt = nDone + ' of 4 stages complete';
+    v.progressPct = Math.round(nDone/3*100) + '%';
+    v.progressTxt = nDone + ' of 3 stages complete';
     const selfDone = done.s1 && done.s2 && done.s3;
+    v.assessmentDone = selfDone;
     const decision = vaCand ? (vaCand.rec === 'Do Not Advance' ? 'Decline' : vaCand.stage >= 6 ? 'Advance' : 'none') : (LIVE_ENABLED ? ((this.candInfo && this.candInfo.decision) || 'none') : (this.props.candidateDecision ?? 'none'));
     const decided = decision === 'Advance' || decision === 'Decline';
-    v.showStatus = selfDone;
+    v.showStatus = selfDone || isCombine;
+    const combineSub = done.s5a ? 'Completed · scored independently by two evaluators' : inv.hasSession ? ('Scheduled ' + inv.session + (isCombine ? '' : ' · your combine link was emailed to you separately')) : 'Scheduled separately — you’ll get a second email with the date and your combine link';
     v.statusSteps = [
-      {label:'Application & assessments received', sub:'Stages 1–3 complete · reviewed by the talent team', on:true},
-      {label:'Live combine', sub: done.s5a ? 'Completed · scored independently by two evaluators' : done.s5b ? 'Case submitted · session ' + inv.session : 'Scheduled ' + inv.session + ' · submit your case beforehand', on: done.s5a || done.s5b},
+      {label:'Assessment received', sub: selfDone ? 'Stages 1–3 complete · scored and reviewed by the talent team' : 'Not completed — the team will let you know if it is needed', on: selfDone},
+      {label:'Live combine', sub: combineSub, on: done.s5a || !!inv.hasSession},
       {label:'Panel review', sub:'Two evaluators’ scores compared; any disagreement is discussed, never averaged away', on: done.s5a},
       {label:'Decision', sub: decided ? 'Recorded — see below' : 'Within five business days of your combine, by email and here', on: decided}
     ].map(s => ({label:s.label, sub:s.sub, mark: s.on ? '●' : '○', color: s.on ? GL : '#5C6B61'}));
-    v.decisionAdvance = selfDone && decision === 'Advance'; v.decisionDecline = selfDone && decision === 'Decline';
+    v.decisionAdvance = (selfDone || isCombine) && decision === 'Advance'; v.decisionDecline = (selfDone || isCombine) && decision === 'Decline';
     v.decisionAdvanceTxt = 'Two evaluators independently reviewed your combine, interview, and evidence. Ram\u00f3n Delgado, Regional Sales Director, will call you within two business days to walk through the offer and cohort start date. A copy of this decision was emailed to you.';
-    // s1
+    // s1 — acknowledgment plus one multiple-choice question (no free text anywhere in the assessment)
     v.realities = D.realities; v.ack = st.ack;
     v.toggleAck = () => this.setState({ack:!st.ack});
     v.ackBorder = st.ack ? 'rgba(16,185,129,.45)' : 'rgba(160,190,170,.13)';
-    v.challenge = st.challenge; v.setChallenge = e => this.setState({challenge:e.target.value});
-    const s1ok = st.ack && st.challenge.trim().length > 20;
+    v.challengeOpts = (D.realities || []).map(r => { const on = st.challenge === r; return {label:r, on: () => this.setState({challenge:r}), bg: on ? 'rgba(16,185,129,.16)' : '#0B120E', border: on ? 'rgba(16,185,129,.6)' : 'rgba(160,190,170,.2)', fg: on ? GL : '#D5DED7'}; });
+    const s1ok = st.ack && !!st.challenge;
     v.s1Blocked = !s1ok; v.s1BtnBg = s1ok ? G : '#20302680';
-    v.s1Hint = s1ok ? '' : 'Check the acknowledgment and share a few sentences to continue.';
+    v.s1Hint = s1ok ? '' : 'Check the acknowledgment and pick the part you expect to be hardest.';
     v.submitS1 = () => { if (s1ok) this.markDone('s1', {cview:'dash'}); };
-    // s2
-    const ap = st.app, setA = k => e => this.setState({app:{...this.state.app, [k]:e.target.value}});
+    // s2 — contact details and résumé (also the whole of a details-only link)
+    const setA = k => e => this.setState({app:{...this.state.app, [k]:e.target.value}});
     v.appFields = [
       {label:'Full name', ph:'First and last name', val:ap.name, set:setA('name')},
       {label:'Email', ph:'you@example.com', val:ap.email, set:setA('email')},
       {label:'Phone', ph:'(555) 000-0000', val:ap.phone, set:setA('phone')},
-      {label:'Preferred location', ph:'e.g. San Marcos, TX \u00b7 open to relocation', val:ap.loc, set:setA('loc')}
+      {label:'Location', ph:'e.g. San Marcos, TX · open to relocation', val:ap.loc, set:setA('loc')},
+      {label:'School or current organization', ph:'e.g. Texas State University', val:ap.school || '', set:setA('school')}
     ];
-    v.appRole = ap.role; v.setAppRole = setA('role');
+    v.appRole = ap.role || inv.role; v.setAppRole = setA('role');
     v.appLinkedin = ap.linkedin; v.setLinkedin = setA('linkedin');
     v.authYes = () => this.setState({app:{...ap, auth:true}});
     v.authNo = () => this.setState({app:{...ap, auth:false}});
     v.authYesBg = ap.auth===true ? 'rgba(16,185,129,.16)' : '#0B120E'; v.authYesFg = ap.auth===true ? GL : '#A7B5AB';
     v.authNoBg = ap.auth===false ? 'rgba(16,185,129,.16)' : '#0B120E'; v.authNoFg = ap.auth===false ? GL : '#A7B5AB';
-    v.toggleResume = () => this.setState({app:{...ap, resume:!ap.resume}});
-    v.resumeTxt = ap.resume ? 'resume_alex_carter.pdf \u2713 uploaded' : 'Upload r\u00e9sum\u00e9';
-    v.resumeBorder = ap.resume ? 'rgba(16,185,129,.5)' : 'rgba(160,190,170,.3)';
-    v.resumeBg = ap.resume ? 'rgba(16,185,129,.06)' : 'transparent';
-    v.resumeColor = ap.resume ? GL : '#A7B5AB';
-    const LIM = 900;
-    v.evItems = D.evQs.map((q, i) => ({
-      num: 'Q' + (i+1), q, val: st.ev[i],
-      set: e => { const a=[...this.state.ev]; a[i]=e.target.value.slice(0,LIM); this.setState({ev:a}); },
-      count: st.ev[i].length + ' / ' + LIM,
-      countColor: st.ev[i].length > LIM-60 ? AMB : '#5C6B61'
-    }));
+    const resumeName = ap.resume && typeof ap.resume === 'object' ? ap.resume.name : ap.resume ? 'Résumé on file' : '';
+    v.pickResume = e => this.pickResume(e);
+    v.resumeTxt = resumeName ? resumeName + ' ✓ uploaded' : 'Upload résumé';
+    v.resumeSub = resumeName ? 'Click to replace it' : 'PDF or Word · 15 MB max · secure upload';
+    v.resumeMsg = st.resumeMsg || ''; v.resumeMsgColor = /^Could not/.test(st.resumeMsg || '') ? RED : '#8FA396';
+    v.resumeBorder = resumeName ? 'rgba(16,185,129,.5)' : 'rgba(160,190,170,.3)';
+    v.resumeBg = resumeName ? 'rgba(16,185,129,.06)' : 'transparent';
+    v.resumeColor = resumeName ? GL : '#A7B5AB';
     v.consent = ap.consent;
     v.toggleConsent = () => this.setState({app:{...ap, consent:!ap.consent}});
-    const s2ok = ap.name && ap.email && ap.auth!==null && ap.resume && ap.consent && st.ev.every(x => x.trim().length > 30);
+    const s2ok = ap.name && ap.email && ap.auth!==null && !!ap.resume && ap.consent;
     v.s2Blocked = !s2ok; v.s2BtnBg = s2ok ? G : '#20302680';
-    v.s2Hint = s2ok ? '' : 'Complete contact info, r\u00e9sum\u00e9, work authorization, all five evidence answers, and consent.';
-    v.submitS2 = () => { if (s2ok) this.markDone('s2', {cview:'dash'}); };
+    v.s2Hint = s2ok ? '' : 'Complete your contact details, résumé, work authorization, and consent.';
+    v.submitS2 = () => { if (!s2ok) return; if (isInfo) this.setState({infoDone:true, cview:'infodone'}); else this.markDone('s2', {cview:'dash'}); };
+    v.s2Kicker = isInfo ? 'Your details' : 'Stage 02 · Your details & résumé';
+    v.s2Title = isInfo ? 'A couple of minutes, then you’re done.' : 'Tell us where to reach you.';
+    v.s2Intro = isInfo ? 'Peak Sports MGMT asked for your contact details and résumé. There are no questions to answer here and nothing is scored.' : 'Contact details and your résumé. Nothing on this page is scored — the hiring team just needs to reach you.';
+    v.s2BtnTxt = isInfo ? 'Send my details' : 'Save & continue';
+    v.infoDoneTxt = 'We have your details' + (resumeName ? ' and your résumé' : '') + '. If you move forward, the Sales Combine assessment (about 20–30 minutes, all multiple choice) arrives as a separate link from the team.';
+    v.reopenInfo = () => this.setState({cview:'info'});
     // s3 Sales Decisions (bank flow: likert / pairs / scenarios / worst-move, interleaved)
     const candRole = vaCand ? vaCand.role : inv.role;
     const bkProf = B ? B.ROLES[profIdFor(candRole)] : null;
@@ -472,14 +571,14 @@ export class PeakCombine extends React.Component<any, any> {
     v.bkKindLabel = ({likert:'How true is this of you?', pair:'Both are good. Which is more you?', scenario:'What would you actually do?', worst:'Which is the worst move?'})[bkItem.kind] || 'Sales decisions';
     v.bkHasText = bkItem.kind !== 'pair' && !!bkItem.text; v.bkText = bkItem.text || '';
     v.bkIsLikert = bkItem.kind === 'likert'; v.bkIsPair = bkItem.kind === 'pair'; v.bkIsChoice = bkItem.kind === 'scenario' || bkItem.kind === 'worst';
-    const bkPick = val => { const a = {...this.state.bkAns, [bkItem.id]: val}; const nx = bkI + 1; if (nx >= bkTotal) this.setState({bkAns:a, bkIdx:bkTotal, done:{...this.state.done, s3:true, s4:true}, cview:'dash'}); else this.setState({bkAns:a, bkIdx:nx}); };
+    const bkPick = val => { const a = {...this.state.bkAns, [bkItem.id]: val}; const nx = bkI + 1; if (nx >= bkTotal) this.setState({bkAns:a, bkIdx:bkTotal, done:{...this.state.done, s3:true, s4:true}, cview:'finished'}); else this.setState({bkAns:a, bkIdx:nx}); };
     const selSty = on => ({bg: on ? 'rgba(16,185,129,.16)' : '#0B120E', border: on ? 'rgba(16,185,129,.6)' : 'rgba(160,190,170,.2)', fg: on ? GL : '#D5DED7'});
     v.bkScale = ['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'].map((label, k) => ({label, ...selSty(bkCur === k + 1), on: () => bkPick(k + 1)}));
     v.bkPair = bkItem.kind === 'pair' ? [['a', bkItem.a[2]], ['b', bkItem.b[2]]].map(([side, text]) => ({text, ...selSty(bkCur === side), on: () => bkPick(side)})) : [];
     v.bkOpts = v.bkIsChoice ? B.shuffled(bkItem.opts, bkI * 7 + 13).map((o, k) => ({letter:'ABCD'[k], text:o.text, ...selSty(bkCur === o.i), on: () => bkPick(o.i)})) : [];
     v.bkCanBack = bkI > 0 && !done.s3; v.bkBack = () => this.setState({bkIdx: Math.max(0, this.state.bkIdx - 1)});
     // s5
-    v.s5aStatus = done.s5a ? 'Completed' : 'Scheduled · ' + inv.session; v.s5aStatusColor = done.s5a ? GL : AMB;
+    v.s5aStatus = done.s5a ? 'Completed' : inv.hasSession ? 'Scheduled · ' + inv.session : 'Not yet scheduled'; v.s5aStatusColor = done.s5a ? GL : inv.hasSession ? AMB : DIM;
     v.s5bStatus = done.s5b ? 'Submitted' : 'Due before your session'; v.s5bStatusColor = done.s5b ? GL : DIM;
     v.s5aBtnTxt = done.s5a ? 'Session summary' : 'Session details';
     v.s5bBtnTxt = done.s5b ? 'View submission' : 'Begin Exercise B';
@@ -493,21 +592,26 @@ export class PeakCombine extends React.Component<any, any> {
     v.consentRec = st.consentRec; v.toggleConsentRec = () => this.setState({consentRec:!st.consentRec});
     v.consentBorder = st.consentRec ? 'rgba(16,185,129,.45)' : 'rgba(160,190,170,.13)';
     v.notResched = !st.resched; v.resched = st.resched; v.askResched = () => this.setState({resched:true});
-    v.toggleRecorded = () => this.setState({recorded:!st.recorded});
-    v.recBorder = st.recorded ? 'rgba(16,185,129,.5)' : 'rgba(160,190,170,.3)';
-    v.recBg = st.recorded ? 'rgba(16,185,129,.06)' : 'transparent';
-    v.recColor = st.recorded ? GL : '#A7B5AB';
+    const gcalHref = () => { const s = inv.startsAt ? new Date(inv.startsAt) : null; if (!s || isNaN(s.getTime())) return ''; const e = new Date(s.getTime() + 60 * 60000); const f = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent('Peak Sales Combine — live session') + '&dates=' + f(s) + '/' + f(e) + '&details=' + encodeURIComponent('Combine page: ' + (inv.combineLink || '')) + (inv.link && /^https?:/.test(inv.link) ? '&location=' + encodeURIComponent(inv.link) : ''); };
+    v.gcalHref = LIVE_ENABLED ? gcalHref() : '';
+    // s5b — written answers, or a real file upload for slides / video
+    const caseFile = st.caseFile;
+    v.pickCaseFile = e => this.pickCaseFile(e);
+    v.caseUpTxt = caseFile ? caseFile.name + ' ✓ ready to submit' : (st.caseMode==='Video' ? 'Upload a short video response' : 'Upload your slide deck');
+    v.caseUpSub = caseFile ? 'Click to replace it' : st.caseMode==='Video' ? '5:00 max · MP4, MOV or WEBM · 15 MB' : 'PDF or PowerPoint · 15 MB max';
+    v.caseMsg = st.caseMsg || ''; v.caseMsgColor = /^Could not/.test(st.caseMsg || '') ? RED : '#8FA396';
+    v.recBorder = caseFile ? 'rgba(16,185,129,.5)' : 'rgba(160,190,170,.3)';
+    v.recBg = caseFile ? 'rgba(16,185,129,.06)' : 'transparent';
+    v.recColor = caseFile ? GL : '#A7B5AB';
     // s5b
     v.caseModes = ['Written','Slides upload','Video'].map(m => ({label:m, on:() => this.setState({caseMode:m}), bg: st.caseMode===m ? 'rgba(16,185,129,.14)' : 'transparent', fg: st.caseMode===m ? GL : '#8FA396'}));
     v.caseWritten = st.caseMode==='Written';
     v.caseUpload = st.caseMode!=='Written';
-    v.caseUpTxt = st.recorded ? 'File \u2713 ready to submit' : (st.caseMode==='Video' ? '\u25cf Record / upload a short video response' : 'Drop your slide deck here (PDF, PPTX)');
-    v.caseUpSub = st.caseMode==='Video' ? '5:00 max \u00b7 transcript auto-generated' : '10 MB max \u00b7 secure upload';
     v.caseItems = D.caseQs.map((q, i) => ({num: String(i+1).padStart(2,'0'), q, val: st.caseAns[i], set: e => { const a=[...this.state.caseAns]; a[i]=e.target.value; this.setState({caseAns:a}); }}));
-    const s5bOk = st.caseMode==='Written' ? st.caseAns.every(x => x.trim().length > 10) : st.recorded;
+    const s5bOk = st.caseMode==='Written' ? st.caseAns.every(x => x.trim().length > 10) : !!caseFile;
     v.s5bBlocked = !s5bOk || done.s5b;
     v.s5bSubmitBg = (s5bOk && !done.s5b) ? G : '#20302680';
-    v.submitS5b = () => { if (s5bOk && !done.s5b) this.markDone('s5b', {cview:'s5', recorded:false}); };
+    v.submitS5b = () => { if (s5bOk && !done.s5b) this.markDone('s5b', {cview:'s5'}); };
     // accommodation
     v.accomOpen = st.accomOpen; v.toggleAccom = () => this.setState({accomOpen:!st.accomOpen});
     v.accomTxt = st.accomTxt; v.setAccomTxt = e => this.setState({accomTxt:e.target.value});
@@ -642,7 +746,7 @@ export class PeakCombine extends React.Component<any, any> {
         readiness: c.readiness ? c.readiness.toFixed(1) : '\u2014',
         readColor: c.readiness ? (c.readiness>=4 ? GL : c.readiness>=3 ? '#E9F0EA' : AMB) : '#4A554D',
         agree: c.agree, agreeColor: c.agree==='Flagged' ? AMB : c.agree==='High' ? GL : '#5C6B61',
-        openProfile: () => this.setState({profileId:c.id, aview:'profile', dec:{rec:null, note:''}}),
+        openProfile: () => this.setState({profileId:c.id, aview:'profile', dec:{rec:null, note:''}, notesDraft:null, trOpen:false, rpItemsOpen:false}),
         canReview: c.stage === 2 && isMgr && !st.arDone[c.id],
         review: () => this.setState({arId:c.id, aview:'appreview', arRatings:{}, arSaved:''}),
         viewAs: () => this.setState({viewAs:c.id, cview:'dash'}),
@@ -667,6 +771,9 @@ export class PeakCombine extends React.Component<any, any> {
     const bsAll = st.bankSettings || (B ? Object.fromEntries(B.ROLE_LIST.map(r => [r.id, B.defaultSettings(r)])) : {});
     const reportFor = c => { if (LIVE_ENABLED) return (B && c && c.report) ? {prof: B.ROLES[c.report.profileId] || B.ROLES[profIdFor(c.role)], res: c.report} : null; if (!B || !c || c.sjt == null) return null; const prof = B.ROLES[profIdFor(c.role)]; const tier = c.sjt >= 80 ? 'strong' : c.sjt >= 62 ? 'mixed' : 'weak'; return {prof, res: B.score(prof, B.demoAnswers(prof, tier), bsAll[prof.id] || B.defaultSettings(prof))}; };
     const rp = reportFor(p);
+    const sigColor = s => s >= 95 ? G : s >= 70 ? GL : s >= 45 ? '#A7B5AB' : s >= 20 ? AMB : RED;
+    const kindLabel = k => ({likert:'Self-rating', pair:'Forced choice', scenario:'Scenario', worst:'Worst move'})[k] || k;
+    const evRow = it => ({q:it.q, answer:it.answer, signal:it.signal, score:it.score, best:it.best || '', color: sigColor(it.score), kind: kindLabel(it.kind)});
     v.pHasReport = !!rp;
     const bandColor = b => b === 'Strong match' ? G : b === 'Meets profile' ? GL : b === 'Validate in interview' ? AMB : b === 'Below profile' ? '#F0A070' : RED;
     const sevSty = s => s === 'critical' ? {bg:RED, fg:'#04120B'} : s === 'meaningful' ? {bg:AMB, fg:'#04120B'} : {bg:'rgba(160,190,170,.18)', fg:'#D5DED7'};
@@ -676,12 +783,21 @@ export class PeakCombine extends React.Component<any, any> {
       v.rpProfile = rp.prof.name + ' profile · ' + rp.prof.tag; v.rpProfName = rp.prof.name;
       v.rpScen = r.scenario.answered + '/' + r.scenario.total + ' scenarios · avg ' + r.scenario.avg + ' · ' + r.scenario.elite + ' elite · ' + r.scenario.weak + ' weak';
       v.rpComps = r.comps.map(c => { const col = c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? '#E9D9B0' : AMB; return {name:c.name, meta:(c.critical ? '★ ' : '') + c.weight + '%' + (c.breach ? ' · below floor ' + c.floor : ''), scoreTxt: c.scored ? String(c.score) : 'off', color: c.scored ? col : '#5C6B61', pct: (c.scored ? c.score : 0) + '%', floorPct: c.floor + '%'}; });
-      v.rpFlags = r.redFlags.map(f => ({sev:f.severity, label:f.label, context:f.context, ...sevSty(f.severity)}));
+      v.rpFlags = r.redFlags.map(f => ({sev:f.severity, label:f.label, context:f.context, chosen:f.chosen || '', better:f.better || '', comp:(rp.prof.competencies[f.comp] || {}).name || f.comp, ...sevSty(f.severity)}));
       v.rpFlagCount = r.redFlags.length; v.rpNoFlags = !r.redFlags.length;
-      v.rpPositives = r.positives.map(s => ({label:s.label, comp: rp.prof.competencies[s.comp].name})); v.rpPosCount = r.positives.length;
-      v.rpConsistency = r.consistency.map(t => ({t})); v.rpNoConsistency = !r.consistency.length;
-      v.rpFollowUps = r.followUps; v.rpRefs = r.references;
-    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; }
+      const compNameOf = k => (rp.prof.competencies[k] || {}).name || k;
+      v.rpPositives = r.positives.map(s => ({label:s.label, comp: compNameOf(s.comp), context:s.context || '', chosen:s.chosen || ''})); v.rpPosCount = r.positives.length;
+      v.rpConsistency = r.consistency.map(t => typeof t === 'string' ? {t, evidence:[]} : {t:t.t, evidence:(t.evidence || []).map(evRow)}); v.rpNoConsistency = !r.consistency.length;
+      v.rpFollowUps = (r.followUps || []).map(f => ({comp:f.comp, q:f.q, why:f.why, reasons:(f.reasons || []).join(' · '), evidence:(f.evidence || []).map(evRow)})); v.rpRefs = r.references;
+      // the whole answer trail, grouped by competency, weakest answers first
+      v.rpHasEvidence = !!(r.items && r.items.length);
+      const groups = {};
+      (r.items || []).forEach(it => { (groups[it.compName] = groups[it.compName] || []).push(evRow(it)); });
+      v.rpItemGroups = Object.keys(groups).map(name => { const c = r.comps.find(x => x.name === name) || {}; return {name, scoreTxt: c.score != null ? c.score + ' / 100' : '', color: c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? '#E9D9B0' : AMB, items: groups[name].slice().sort((a, b) => a.score - b.score)}; });
+      v.rpItemCount = (r.items || []).length;
+      v.rpItemsOpen = !!st.rpItemsOpen; v.toggleItems = () => this.setState({rpItemsOpen: !this.state.rpItemsOpen});
+      v.rpItemsBtn = st.rpItemsOpen ? 'Hide the answer trail' : 'Show every answer (' + v.rpItemCount + ')';
+    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; v.rpItemGroups = []; v.rpHasEvidence = false; v.rpItemsOpen = false; }
     const lvColors = {High:[GL,'rgba(16,185,129,.12)'], Medium:['#E9D9B0','rgba(245,184,74,.1)'], Low:[AMB,'rgba(245,184,74,.12)'], '\u2014':['#5C6B61','transparent'], 'In review':['#8FA396','rgba(160,190,170,.08)'], Insufficient:['#5C6B61','transparent']};
     if (p.comp) {
       v.pBars = D.comps.map(c => { const val = p.comp[c.id]; const has = val != null; return {name:c.name, valTxt: has ? val.toFixed(1) : '\u2014', valColor: !has ? '#5C6B61' : val>=3.5 ? GL : val>=2.8 ? '#E9F0EA' : AMB, pct: has ? Math.round(val/5*100)+'%' : '0%', fill: val>=3.5 ? 'linear-gradient(90deg,rgba(16,185,129,.5),#10B981)' : 'linear-gradient(90deg,rgba(245,184,74,.4),#F5B84A)'}; });
@@ -698,6 +814,34 @@ export class PeakCombine extends React.Component<any, any> {
     const sar = p.sar || {s:'\u2014',a:'\u2014',r:'\u2014',l:'\u2014'};
     v.pSarS = sar.s; v.pSarA = sar.a; v.pSarR = sar.r; v.pSarL = sar.l;
     v.pViewAs = () => this.setState({viewAs:p.id, cview:'dash'});
+    // candidate details — contact, résumé, how they entered the pipeline (visible on every profile, scored or not)
+    const dash = x => (x && x !== '\u2014') ? x : '\u2014';
+    v.pDetails = [
+      {label:'Email', val:dash(p.email)}, {label:'Phone', val:dash(p.phone)}, {label:'Location', val:dash(p.loc)}, {label:'School / organization', val:dash(p.schoolTxt != null ? p.schoolTxt : p.school)},
+      {label:'Hiring for', val:dash(p.program)}, {label:'Work authorization', val: p.auth === true ? 'Yes' : p.auth === false ? 'No' : '\u2014'},
+      {label:'Entered as', val: p.source === 'manual' ? 'Added manually' : p.track === 'info' ? 'Details-only link' : 'Assessment link'}, {label:'Added', val: p.createdAt ? fmtDate(p.createdAt) : '\u2014'}
+    ];
+    v.pLinkedin = p.linkedin || ''; v.pLinkedinHref = p.linkedin ? (/^https?:/.test(p.linkedin) ? p.linkedin : 'https://' + p.linkedin) : '';
+    v.pResumeName = p.resumeName || ''; v.pHasResume = !!p.resumePath; v.openResume = () => this.openFile(p.id, p.resumePath);
+    v.pCaseFile = p.caseFile ? p.caseFile.name : ''; v.openCaseFile = () => { if (p.caseFile) this.openFile(p.id, p.caseFile.path); };
+    v.pFileMsg = st.flash['file:' + p.id] || '';
+    v.pNotes = st.notesDraft != null ? st.notesDraft : (p.notes || ''); v.setPNotes = e => this.setState({notesDraft:e.target.value}); v.savePNotes = () => this.saveNotes(p.id);
+    v.notesDirty = st.notesDraft != null && st.notesDraft !== (p.notes || ''); v.pCanEdit = isMgr && LIVE_ENABLED;
+    // transcripts (mock pitch, phone screen, interview) — stored for evaluators; advisory AI read when switched on
+    const allTr = (LIVE_ENABLED && this.live.view) ? (this.live.view.transcripts || []) : [];
+    const trRow = t => { const rv = t.review || {}; const show = !!st.trShow[t.id]; return {id:t.id, kind:t.kind, title:t.title || t.kind, meta: t.t + ' · ' + t.by + (t.source ? ' · ' + t.source : ''), txt:t.txt, show, toggle: () => this.setState({trShow:{...this.state.trShow, [t.id]:!show}}), toggleTxt: show ? 'Hide transcript' : 'Read the transcript',
+      hasReview: t.status === 'done' && !!rv.summary, statusTxt: t.status === 'done' ? 'AI-assisted read · advisory — evaluators decide' : t.status === 'off' ? 'No AI-assisted read (not switched on) — read it directly' : t.status === 'failed' ? 'AI-assisted read failed' + (rv.error ? ': ' + rv.error : '') : t.status === 'pending' ? 'AI-assisted read in progress…' : '',
+      statusColor: t.status === 'done' ? GL : t.status === 'failed' ? AMB : '#7E9186',
+      summary: rv.summary || '', comps: (rv.competencies || []).map(c => ({name:c.name || c.id, rating: c.rating != null ? c.rating + ' / 5' : 'no evidence', color: c.rating == null ? '#5C6B61' : c.rating >= 4 ? GL : c.rating >= 3 ? '#E9F0EA' : AMB, quotes:(c.evidence || []).slice(0, 2).map(e => ({quote:e.quote || '', note:e.note || ''})), note:c.note || ''})),
+      strengths: rv.strengths || [], concerns: rv.concerns || [], followUps: rv.followUps || [], caution: rv.caution || ''}; };
+    v.pTranscripts = allTr.filter(t => t.candId === p.id).map(trRow);
+    v.trEnabled = LIVE_ENABLED && isMgr; v.trOpen = !!st.trOpen; v.toggleTr = () => this.setState({trOpen: !this.state.trOpen, tr:{...this.state.tr, msg:''}});
+    v.trKinds = TR_KINDS.map(k => ({id:k, label:k})); v.trKind = st.tr.kind; v.trTitle = st.tr.title; v.trTxt = st.tr.txt; v.trFileName = st.tr.fileName; v.trMsg = st.tr.msg || '';
+    v.trMsgColor = /^Could not|^Paste/.test(st.tr.msg || '') ? AMB : GL;
+    v.setTrKind = e => this.setState({tr:{...this.state.tr, kind:e.target.value}}); v.setTrTitle = e => this.setState({tr:{...this.state.tr, title:e.target.value}}); v.setTrTxt = e => this.setState({tr:{...this.state.tr, txt:e.target.value, msg:''}});
+    v.pickTrFile = e => this.readTranscriptFile(e); v.submitTr = () => this.submitTranscript(p.id);
+    v.trBusy = st.busy === 'tr'; v.trOk = st.tr.txt.trim().length >= 200 && st.busy !== 'tr'; v.trBtnBg = v.trOk ? G : '#20302680';
+    v.trCount = st.tr.txt.trim().length ? st.tr.txt.trim().length.toLocaleString() + ' characters' : '';
     const allDecisions = [...st.decisions, ...(D.decisions || [])];
     const pDec = allDecisions.find(d => d.candId === p.id);
     v.decRecorded = !!pDec; v.decEditable = !pDec && isMgr; v.decReadOnly = !pDec && !isMgr;
@@ -823,25 +967,34 @@ export class PeakCombine extends React.Component<any, any> {
     v.arAdvance = () => { if (!arAll || this.state.arDone[arC.id]) return; this.setState({arDone:{...this.state.arDone, [arC.id]:'Advanced to Stage 3 · evidence ' + arLv}, arSaved:'Advanced — Stage 3 unlock email sent.'}); };
     v.arHold = () => { if (!arAll || this.state.arDone[arC.id]) return; this.setState({arDone:{...this.state.arDone, [arC.id]:'Not advanced · application stage'}, arSaved:'Recorded — standard decision message queued; add rationale in the decision log.'}); };
     v.arSaved = st.arSaved;
-    // schedule a combine
+    // schedule a combine — any candidate without a session can be scheduled; those who finished the assessment sort first
     const sessSeed = D.sessions || [];
-    const schedCands = D.candidates.filter(c => c.stage === 4 && !sessSeed.some(s => s.candId === c.id) && !st.scheduled.some(s => s.candId === c.id));
-    v.schCandOpts = schedCands.length ? schedCands.map(c => ({id:c.id, label: dispName(c) + ' · ' + c.role})) : [{id:'', label:'No candidates awaiting a session'}];
-    const setS = k => e => this.setState({sch:{...this.state.sch, [k]:e.target.value, sent:''}});
-    v.schCand = st.sch.cand; v.setSchCand = setS('cand'); v.schDate = st.sch.date; v.setSchDate = setS('date'); v.schTime = st.sch.time; v.setSchTime = setS('time');
+    const noSession = c => !c.hasSession && !sessSeed.some(s => s.candId === c.id) && !st.scheduled.some(s => s.candId === c.id);
+    const assessed = c => !!(c.done && c.done.s3) || c.stage >= 4;
+    const schedCands = D.candidates.filter(c => noSession(c) && !c.withdrawn && !c.rec).sort((a, b) => (assessed(b) ? 1 : 0) - (assessed(a) ? 1 : 0));
+    const readyTxt = c => assessed(c) ? 'assessment complete' : (c.stageLabel || 'assessment pending').toLowerCase();
+    v.schCandOpts = schedCands.length ? schedCands.map(c => ({id:c.id, label: dispName(c) + ' · ' + c.role + ' · ' + readyTxt(c)})) : [{id:'', label:'No candidates without a session'}];
+    v.schReadyCount = schedCands.filter(assessed).length; v.schOtherCount = schedCands.length - v.schReadyCount;
+    const setS = k => e => this.setState({sch:{...this.state.sch, [k]:e.target.value, sent:'', msg:'', warn:[]}});
+    v.schCand = st.sch.cand; v.setSchCand = setS('cand'); v.schDate = st.sch.date || ''; v.setSchDate = setS('date'); v.schTime = st.sch.time || ''; v.setSchTime = setS('time');
+    v.schTz = st.sch.tz || 'America/Chicago'; v.setSchTz = setS('tz'); v.tzOptions = TZ_OPTIONS.map(([id, label]) => ({id, label}));
+    v.schDur = String(st.sch.dur || 60); v.setSchDur = e => this.setState({sch:{...this.state.sch, dur: parseInt(e.target.value, 10) || 60, sent:'', msg:'', warn:[]}}); v.durOptions = [45, 60, 75, 90].map(n => ({id:String(n), label:n + ' minutes'}));
+    const tzShort = TZ_SHORT[st.sch.tz] || 'CT';
+    v.schWhenPreview = whenTxt(st.sch.date, st.sch.time, tzShort);
     const evalUsers = users.filter(u => u.roles.includes('evaluator') && !st.deactivated[u.id]);
     v.evalOpts = evalUsers.map(u => ({id:u.id, label:u.short + ' · ' + u.title}));
     v.schE1 = st.sch.e1; v.setSchE1 = setS('e1'); v.schE2 = st.sch.e2; v.setSchE2 = setS('e2');
     const schC = schedCands.find(c => c.id === st.sch.cand);
     v.schLink = schC ? 'meet.peaksportsmgmt.com/combine-' + schC.anon.replace('Candidate #','') : '—';
     const sameEval = st.sch.e1 === st.sch.e2;
-    const schOk = !!schC && !sameEval && st.sch.date.trim() && st.sch.time.trim();
-    v.schWarn = st.sch.sent ? 'Invites sent — candidate portal updated; calendar holds placed for both evaluators.' : sameEval ? '⚠ Two different evaluators are required — independent scoring is the point.' : !schC ? 'Pick a candidate who has finished the SJT and has no session yet.' : '';
-    v.schWarnColor = st.sch.sent ? GL : sameEval ? AMB : '#5C6B61';
+    const schOk = !!schC && !sameEval && (st.sch.date || '').trim() && (st.sch.time || '').trim() && st.busy !== 'sch';
+    v.schWarn = st.sch.sent ? 'Invites sent — candidate portal updated; calendar holds placed for both evaluators.' : sameEval ? '⚠ Two different evaluators are required — independent scoring is the point.' : !schC ? 'Pick a candidate who has no session yet.' : !assessed(schC) ? 'This candidate has not finished the assessment yet. You can still schedule — the scouting report lands when they finish.' : '';
+    v.schWarnColor = st.sch.sent ? GL : sameEval ? AMB : !schC ? '#5C6B61' : !assessed(schC) ? '#E9D9B0' : '#5C6B61';
+    v.schMsg = st.sch.msg || ''; v.schWarnings = st.sch.warn || [];
     v.schBlocked = !schOk; v.schBtnBg = schOk ? G : '#20302680';
     const uShort = id => (users.find(u => u.id === id) || {}).short || id;
-    v.sendSchedule = () => { const s = this.state.sch; const c = schedCands.find(x => x.id === s.cand); if (!c || s.e1 === s.e2) return; const entry = {candId:c.id, cand:c.name, when:s.date + ' · ' + s.time + ' CT', evals:uShort(s.e1) + ' + ' + uShort(s.e2), link:'meet.peaksportsmgmt.com/combine-' + c.anon.replace('Candidate #',''), ver:'v1.2', status:'Invites sent'}; const next = schedCands.filter(x => x.id !== c.id)[0]; this.setState({scheduled:[entry, ...this.state.scheduled], sch:{...s, cand: next ? next.id : '', sent:'yes'}}); };
-    v.schedList = [...st.scheduled, ...sessSeed.map(s => ({...s, status:'Confirmed'}))];
+    v.sendSchedule = () => { const s = this.state.sch; const c = schedCands.find(x => x.id === s.cand); if (!c || s.e1 === s.e2) return; const entry = {candId:c.id, cand:c.name, when:whenTxt(s.date, s.time, tzShort), evals:uShort(s.e1) + ' + ' + uShort(s.e2), link:(s.link || '').trim() || 'meet.peaksportsmgmt.com/combine-' + c.anon.replace('Candidate #',''), ver:'v1.2', status:'Invites sent'}; const next = schedCands.filter(x => x.id !== c.id)[0]; this.setState({scheduled:[entry, ...this.state.scheduled], sch:{...s, cand: next ? next.id : '', sent:'yes', msg:'Session saved (demo) — in live mode the candidate and both evaluators are emailed, and a Google Calendar invite goes out when the calendar is connected.', warn:[]}}); };
+    v.schedList = [...st.scheduled, ...sessSeed.map(s => ({...s, status: s.status || 'Confirmed'}))];
     // users
     const allUsers = [...users, ...st.invited];
     v.userRows = allUsers.map(u => { const off = !!st.deactivated[u.id]; return {name:u.name, email:u.email, title:u.title, roleTags:u.roles.map(roleLabel), status: off ? 'Deactivated' : (u.status || 'Active'), statusColor: off ? RED : u.status === 'Invited' ? AMB : GL, action: off ? 'Reactivate' : 'Deactivate', toggle: () => this.setState({deactivated:{...this.state.deactivated, [u.id]:!off}})}; });
@@ -870,6 +1023,7 @@ export class PeakCombine extends React.Component<any, any> {
       v.inviteLoading = st.mode === 'candidate' && st.invite === 'loading';
       v.inviteSaved = st.mode === 'candidate' && st.invite === 'saved';
       v.inviteInvalid = st.mode === 'candidate' && st.invite === 'invalid';
+      v.combineExpired = st.mode === 'candidate' && st.invite === 'cexpired';
       v.resentTo = st.resentTo || 'your email'; v.resentErr = st.resentErr || '';
       v.resend = () => this.resendOwnLink(); v.reopenLink = () => this.setState({invite:'valid'});
       v.saveErr = st.saveErr || '';
@@ -879,21 +1033,27 @@ export class PeakCombine extends React.Component<any, any> {
       v.decisionAdvanceTxt = (this.candInfo && this.candInfo.decisionTxt) || v.decisionAdvanceTxt;
       const joinLink = (this.candInfo && this.candInfo.link) || '';
       v.joinDisabled = !/^https?:\/\//.test(joinLink); v.joinHref = v.joinDisabled ? '' : joinLink;
-      // pipeline: invite candidates
+      // pipeline: add a candidate — full assessment link, details-only link, or a manual entry with a résumé
       const nc = st.newCand;
       v.showInviteForm = v.isStaff && isMgr;
-      v.ncName = nc.name; v.ncEmail = nc.email; v.ncPhone = nc.phone; v.ncRole = nc.role;
+      v.ncName = nc.name; v.ncEmail = nc.email; v.ncPhone = nc.phone; v.ncRole = nc.role; v.ncProgram = nc.program || ''; v.ncLoc = nc.loc || ''; v.ncSchool = nc.school || ''; v.ncLinkedin = nc.linkedin || ''; v.ncTrack = nc.track || 'assessment';
+      v.ncFileName = nc.file ? nc.file.name : '';
       const setNC = k => e => this.setState({newCand:{...this.state.newCand, [k]:e.target.value, saved:''}});
-      v.setNcName = setNC('name'); v.setNcEmail = setNC('email'); v.setNcPhone = setNC('phone'); v.setNcRole = setNC('role');
-      v.ncRoles = Object.keys(D.profileByRole || {});
+      v.setNcName = setNC('name'); v.setNcEmail = setNC('email'); v.setNcPhone = setNC('phone'); v.setNcRole = setNC('role'); v.setNcProgram = setNC('program'); v.setNcLoc = setNC('loc'); v.setNcSchool = setNC('school'); v.setNcLinkedin = setNC('linkedin');
+      v.ncRoles = D.roleOptions || Object.keys(D.profileByRole || {});
+      v.ncTracks = [{id:'assessment', label:'Full assessment link', d:'Job preview · details & résumé · Sales Decisions · 20–30 min'}, {id:'info', label:'Details-only link', d:'Contact details & résumé · 2 min · no questions'}].map(t => { const on = (nc.track || 'assessment') === t.id; return {...t, on: () => this.setState({newCand:{...this.state.newCand, track:t.id, saved:''}}), bg: on ? 'rgba(16,185,129,.12)' : 'transparent', fg: on ? GL : '#A7B5AB', border: on ? 'rgba(16,185,129,.45)' : 'rgba(160,190,170,.18)'}; });
+      v.pickNcFile = e => { const f = e.target.files && e.target.files[0]; this.setState({newCand:{...this.state.newCand, file: f || null, saved:''}}); try { e.target.value = ''; } catch (x) {} };
+      v.clearNcFile = () => this.setState({newCand:{...this.state.newCand, file:null}});
       const ncOk = nc.name.trim().length > 1 && /@/.test(nc.email) && st.busy !== 'invite';
-      v.ncBlocked = !ncOk; v.ncBtnBg = ncOk ? G : '#20302680';
-      v.ncEmailInvite = () => this.createCandidate(true); v.ncCopyInvite = () => this.createCandidate(false);
+      v.ncBlocked = !ncOk; v.ncBtnBg = ncOk ? G : '#20302680'; v.ncBusy = st.busy === 'invite';
+      v.ncEmailInvite = () => this.createCandidate('email'); v.ncCopyInvite = () => this.createCandidate('copy'); v.ncManual = () => this.createCandidate('manual');
+      v.ncLinkLabel = (nc.track || 'assessment') === 'info' ? 'details link' : 'assessment link';
       v.ncSaved = nc.saved || ''; v.ncSavedColor = /^Could not/.test(nc.saved || '') ? RED : GL;
       v.pipeEmpty = v.isStaff && D.candidates.length === 0;
-      v.pipeRows = v.pipeRows.map((row, i) => { const c = D.candidates[i]; if (!c) return row; return {...row, stageLabel: c.stageLabel, dSub: st.blind ? row.dSub : (c.loc + ' \u00b7 ' + c.email), showInvite: isMgr && c.stage < 2 && !c.withdrawn, resendTxt: c.inviteSent ? 'Resend link' : 'Email link', resend: () => this.sendInviteTo(c), copy: () => this.copyLinkFor(c), flash: st.flash[c.id] || '', inviteState: c.inviteState + (c.resendRequested ? ' \u00b7 new link requested' : ''), inviteColor: (c.resendRequested || c.expired) ? AMB : c.opened ? GL : '#8FA396'}; });
+      v.pipeRows = v.pipeRows.map((row, i) => { const c = D.candidates[i]; if (!c) return row; const info = c.track === 'info'; return {...row, stageLabel: c.stageLabel, dSub: st.blind ? row.dSub : ((c.loc && c.loc !== '\u2014' ? c.loc + ' \u00b7 ' : '') + c.email), canReview:false, showInvite: isMgr && !c.withdrawn && !c.done.s3 && !(info && c.infoDone), showUpgrade: isMgr && !c.withdrawn && (info || c.source === 'manual') && !c.done.s3, upgradeTxt: info ? 'Send assessment link' : 'Email assessment link', resendTxt: (c.inviteSent ? 'Resend ' : 'Email ') + (info ? 'details link' : 'link'), resend: () => this.sendInviteTo(c), copy: () => this.copyLinkFor(c), upgrade: () => this.sendInviteTo(c, 'assessment'), flash: st.flash[c.id] || '', inviteState: c.inviteState + (c.resendRequested ? ' \u00b7 new link requested' : ''), inviteColor: (c.resendRequested || c.expired) ? AMB : c.opened ? GL : '#8FA396', tag: c.source === 'manual' ? 'Added manually' : info ? 'Details-only link' : '', hasResume: !!c.resumePath}; });
       // profile
       v.pNeedsScore = !!(p && p.done && p.done.s3 && !p.report && isMgr);
+      v.rpNeedsEvidence = !!(p && p.report && !(p.report.items && p.report.items.length) && isMgr);
       v.rescore = () => this.rescoreCandidate(p.id);
       v.pScoreMsg = st.flash['score:' + p.id] || '';
       // evaluator cockpit: my sessions, the real other evaluator
@@ -913,7 +1073,10 @@ export class PeakCombine extends React.Component<any, any> {
         const lcAccom = accomApproved(st.liveCand);
         const lp = lc.progress || {}, ld = lc.done || {};
         v.liveCandName = lc.name || '';
-        v.liveBrief = lc.name ? (lc.name + ' \u00b7 ' + lc.role + (lc.loc && lc.loc !== '\u2014' ? ' \u00b7 ' + lc.loc : '') + '. Sales decisions ' + (lc.sjt != null ? lc.sjt + '/100 (' + ((lc.report && lc.report.band) || '') + ')' : 'not yet scored') + ' \u00b7 application evidence rated ' + lc.appEv + '.' + (ld.s5b ? ' Case submitted \u2014 read it before the session.' : ' Case not yet submitted.')) : 'Pick a session from the roster.';
+        v.liveBrief = lc.name ? (lc.name + ' \u00b7 ' + lc.role + (lc.program ? ' \u00b7 ' + lc.program : '') + (lc.loc && lc.loc !== '\u2014' ? ' \u00b7 ' + lc.loc : '') + '. Sales decisions ' + (lc.sjt != null ? lc.sjt + '/100 (' + ((lc.report && lc.report.band) || '') + ')' : 'not yet scored') + '.' + (ld.s5b ? ' Case submitted \u2014 read it before the session.' : ' Case not yet submitted.')) : 'Pick a session from the roster.';
+        v.liveTranscripts = allTr.filter(t => t.candId === st.liveCand).map(trRow);
+        v.liveCaseFile = lc.caseFile ? lc.caseFile.name : ''; v.openLiveCaseFile = () => { if (lc.caseFile) this.openFile(lc.id, lc.caseFile.path); };
+        v.liveResume = lc.resumeName || ''; v.openLiveResume = () => { if (lc.resumePath) this.openFile(lc.id, lc.resumePath); };
         v.liveFlags = [
           {label: lcAccom ? 'Accommodation in place \u00b7 +50% prep time' : 'No accommodations', fg: lcAccom ? '#E9D9B0' : '#7E9186', bg: lcAccom ? 'rgba(245,184,74,.1)' : 'transparent', border: lcAccom ? 'rgba(245,184,74,.35)' : 'rgba(160,190,170,.14)'},
           {label: lp.consentRec ? 'Recording consent \u2713' : 'Recording consent not given', fg: lp.consentRec ? GL : AMB, bg: lp.consentRec ? 'rgba(16,185,129,.1)' : 'rgba(245,184,74,.1)', border: lp.consentRec ? 'rgba(16,185,129,.3)' : 'rgba(245,184,74,.35)'},
@@ -937,8 +1100,20 @@ export class PeakCombine extends React.Component<any, any> {
         v.evalOpts = users.filter(u => u.active && u.roles.includes('evaluator')).map(u => ({id:u.id, label:u.short + (u.title ? ' \u00b7 ' + u.title : '')}));
         v.schLinkEditable = true; v.schLinkVal = st.sch.link || ''; v.setSchLink = setS('link');
         v.schLink = (st.sch.link || '').trim() || 'Paste a Zoom / Meet / Teams link';
-        v.sendSchedule = async () => { const s = this.state.sch; const c = schedCands.find(x => x.id === s.cand); if (!c || s.e1 === s.e2 || !s.date.trim() || !s.time.trim()) return; const r = await this.write(() => L.insertSession({candidate_id:c.id, when_txt:s.date.trim() + ' \u00b7 ' + s.time.trim() + ' CT', e1:s.e1, e2:s.e2, link:(s.link || '').trim()}), 'err'); if (r.ok) this.setState({sch:{...this.state.sch, cand:'', sent:'yes', link:''}}); };
-        if (st.sch.sent) v.schWarn = 'Session saved \u2014 it now shows in the candidate\u2019s portal and both evaluators\u2019 rosters.';
+        v.sendSchedule = async () => {
+          const s = this.state.sch; const c = schedCands.find(x => x.id === s.cand);
+          if (!c || s.e1 === s.e2 || !(s.date || '').trim() || !(s.time || '').trim() || this.state.busy === 'sch') return;
+          this.setState({busy:'sch', sch:{...s, msg:'Saving the session and sending invites\u2026', warn:[]}});
+          try {
+            const r = await L.createSession({candidateId:c.id, date:s.date, time:s.time, tz:s.tz || 'America/Chicago', durationMin:s.dur || 60, e1:s.e1, e2:s.e2, link:(s.link || '').trim()});
+            await L.refresh();
+            const how = r.calendar === 'google' ? 'Google Calendar invitations sent to the candidate and both evaluators' + (r.session.link ? ' \u00b7 join link ' + r.session.link : '') : (r.emailed ? 'Candidate emailed' : 'Candidate NOT emailed') + ' with the details and a calendar (.ics) file; both evaluators emailed too';
+            this.setState({sch:{...this.state.sch, cand:'', sent:'yes', link:'', msg:'Session saved for ' + r.session.when + '. ' + how + '. Candidate combine link: ' + r.combineLink, warn:r.warnings || []}});
+          } catch (e) { this.setState({sch:{...this.state.sch, msg:'', warn:['Could not schedule: ' + ((e && e.message) || e)]}}); }
+          this.setState({busy:''});
+        };
+        v.schBusy = st.busy === 'sch';
+        if (st.sch.sent) v.schWarn = '';
         v.recordDecision = async () => { const d = this.state.dec; if (!d.rec || d.note.trim().length <= 20 || !p.id) return; const r = await this.write(() => L.insertDecision({candidate_id:p.id, by_label:(me.short || 'Staff') + ' (' + roleLabel(st.role) + ')', decision:d.rec, rationale:d.note.trim(), agree:p.agree || '\u2014'}), 'err'); if (r.ok) this.setState({dec:{rec:null, note:''}}); };
         v.sendInvite = async () => { const f = this.state.inv; const rs = Object.keys(f.roles).filter(r => f.roles[r]); if (!f.name.trim() || !/@/.test(f.email) || !rs.length) return; const nm = f.name.trim(), parts = nm.split(' '); this.setState({busy:'staff', inv:{...f, saved:'Sending\u2026'}}); try { await L.inviteStaff({name:nm, short:(parts[0][0] + '. ' + parts.slice(1).join(' ')).trim(), email:f.email.trim().toLowerCase(), title:'', roles:rs}); await L.refresh(); this.setState({inv:{name:'', email:'', roles:{}, saved:'Invite emailed \u2014 they create a password from the link.'}}); } catch (e) { this.setState({inv:{...this.state.inv, saved:'Could not send: ' + ((e && e.message) || e)}}); } this.setState({busy:''}); };
         const arSave = async outcome => { if (!arAll || this.state.arDone[arC.id] || !arC.id) return; const r = await this.write(() => L.insertReview({candidate_id:arC.id, ratings:this.state.arRatings, level:arLv, outcome}), 'err'); if (r.ok) this.setState({arSaved: outcome === 'advanced' ? 'Advanced \u2014 the candidate can continue to Sales Decisions.' : 'Recorded \u2014 not advanced at the application stage.'}); };
@@ -966,11 +1141,12 @@ export class PeakCombine extends React.Component<any, any> {
     saveState(this.state);
     if (!LIVE_ENABLED || this.hydrating || !prevState) return;
     const st = this.state;
-    if (st.mode === 'candidate' && this.token && st.invite === 'valid') {
+    if (st.mode === 'candidate' && (this.token || this.combineToken) && st.invite === 'valid') {
+      const keys = this.combineToken ? COMBINE_KEYS : CAND_KEYS;
       const patch = {}; let n = 0;
-      CAND_KEYS.forEach(k => { if (prevState[k] !== st[k]) { patch[k] = st[k]; n++; } });
+      keys.forEach(k => { if (prevState[k] !== st[k]) { patch[k] = st[k]; n++; } });
       if (n) this.queueSave(patch);
-      if (st.done.s3 && !(prevState.done && prevState.done.s3)) this.scoreSoon();
+      if (this.token && st.done.s3 && !(prevState.done && prevState.done.s3)) this.scoreSoon();
     }
     if (st.mode === 'staff' && st.user) {
       ['weightsByRole', 'bankSettings', 'retention'].forEach(k => { if (prevState[k] !== st[k] && st[k] != null) this.queueSetting(k, st[k]); });

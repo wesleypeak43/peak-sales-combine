@@ -25,12 +25,12 @@ Copy `.env.example` to `.env` and fill in the keys to run live mode locally. The
 - `src/data/live.ts` — Supabase client, reads/writes, realtime refresh, and the mapping from database rows to the shapes the screens expect.
 - `src/data/seed.ts` — demo data plus static content (competencies, anchors, questions, roles). `src/data/bank.ts` — Sales Decisions item bank and scoring engine.
 - `src/screens/*.tsx` — one file per surface; `src/template/Template.tsx` — root layout.
-- `api/invite.ts` — emails / refreshes a candidate's personal link. `api/score.ts` — scores Sales Decisions answers on the server. `api/staff.ts` — staff invites and password-reset emails. Shared helpers in `src/server/shared.ts`.
+- `api/invite.ts` — emails / refreshes a candidate's personal link (full assessment or details-only). `api/session.ts` — schedules a combine: Google Calendar event + Meet link when connected, candidate/evaluator emails with .ics, and the candidate's separate combine link. `api/upload.ts` — signed uploads for résumés and Exercise B files (private `candidate-files` bucket). `api/transcript.ts` — stores a transcript and, with `ANTHROPIC_API_KEY`, an advisory Claude read. `api/score.ts` — scores Sales Decisions answers on the server (report includes the answer-level evidence behind every flag and follow-up). `api/staff.ts` — staff invites and password-reset emails. Shared helpers in `src/server/shared.ts`; Google auth in `src/server/google.ts`.
 - `supabase/schema.sql` — tables, row-level security, candidate RPC functions, audit triggers, starter staff. Paste into the Supabase SQL editor.
 - `public/assets/` — logo.
 
 ## Data model (live mode)
 
-`staff` (roles: admin, manager, evaluator, leadership) · `candidates` (token, expiry, `progress` JSON, `report` JSON) · `reviews` · `sessions` · `evaluations` · `interviews` · `decisions` · `accommodations` (+ `accommodation_details`, visible to managers only) · `settings` (weights, thresholds, retention) · `outcomes` · `audit`.
+`staff` (roles: admin, manager, evaluator, leadership) · `candidates` (token, expiry, track = assessment | info, source = invite | manual, contact columns, résumé path, `progress` JSON, `report` JSON) · `reviews` · `sessions` (own `token` for the combine link, `starts_at`, calendar event id) · `evaluations` · `interviews` · `decisions` · `accommodations` (+ `accommodation_details`, visible to managers only) · `transcripts` · `settings` (weights, thresholds, retention) · `outcomes` · `audit` · storage bucket `candidate-files`.
 
-Candidates never authenticate: their link carries a token, and `candidate_open` / `candidate_save` are `security definer` functions that validate it. Staff use Supabase Auth; every table has row-level-security policies keyed on the signed-in email's staff record.
+Candidates never authenticate: the assessment link carries the candidate token (`candidate_open` / `candidate_save`), the combine link carries the session token (`combine_open` / `combine_save`); all four are `security definer` functions that validate it. Staff use Supabase Auth; every table has row-level-security policies keyed on the signed-in email's staff record.

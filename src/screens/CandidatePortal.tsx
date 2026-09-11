@@ -1,16 +1,28 @@
 // CandidatePortal — generated from the Peak Sales Combine prototype template. Plain React; edit freely.
 // V is the view-model returned by PeakCombine.renderVals(): values, lists, and event handlers.
+// Three surfaces share this file: the assessment link (dashboard + stages 1–3), the details-only link (stage 2 alone),
+// and the combine link (live session details + Exercise B), which the candidate receives separately once scheduled.
 import React from 'react';
 
+const KICKER = {fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"} as any;
+const H1 = {margin: "0 0 10px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(32px,8cqw,41px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"} as any;
+const INTRO = {margin: "0 0 24px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "640px"} as any;
+const CARD = {background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px"} as any;
+const LABEL = {fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "14px"} as any;
+const INPUT = {width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "12px 14px", color: "#E9F0EA", fontSize: "14px"} as any;
+const FIELD = {fontSize: "12.5px", fontWeight: "600", color: "#A7B5AB", marginBottom: "6px"} as any;
+const BACK = {background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "18px"} as any;
+const PRIMARY = {background: "#10B981", color: "#04120B", border: "none", borderRadius: "10px", padding: "13px 26px", fontSize: "14px", fontWeight: "800", cursor: "pointer"} as any;
+const GHOST = {background: "transparent", color: "#E9F0EA", border: "1px solid rgba(160,190,170,.3)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer", textDecoration: "none"} as any;
 
 export function CandidatePortal({ V }: { V: any }) {
   return V.isCand ? (<>
-    <main style={{flex: "1", width: "100%", maxWidth: V.candMax, margin: "0 auto", padding: "36px clamp(16px,4vw,28px) 80px", boxSizing: "border-box", containerType: "inline-size", pointerEvents: V.candPE, borderLeft: V.candFrame, borderRight: V.candFrame}}>
+    <main style={{flex: "1", width: "100%", maxWidth: V.candMax, margin: "0 auto", padding: "36px clamp(16px,4vw,28px) 80px", boxSizing: "border-box", containerType: "inline-size", pointerEvents: V.candPE, borderLeft: V.candFrame, borderRight: V.candFrame} as any}>
       {V.vDash ? (<>
         <div style={{animation: "fadeUp .4s ease both"}}>
-          <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"}}>{V.candRoleLine}</div>
-          <h1 style={{margin: "0 0 8px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(35px,10cqw,46px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"}}>{"Welcome, "}{V.candFirst}.</h1>
-          <p style={{margin: "0 0 26px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "620px"}}>Your assessment measures what actually matters in this job — the drive to hunt, ownership of outcomes, response to coaching, and the ability to find a way. Save and return anytime; your progress is kept.</p>
+          <div style={KICKER}>{V.candRoleLine}</div>
+          <h1 style={{...H1, fontSize: "clamp(35px,10cqw,46px)", margin: "0 0 8px"}}>{"Welcome, "}{V.candFirst}.</h1>
+          <p style={{...INTRO, margin: "0 0 26px", maxWidth: "620px"}}>Three short stages, about 20–30 minutes in total, all multiple choice. It measures what actually matters in this job — the drive to hunt, ownership of outcomes, response to coaching, and the ability to find a way. Save and return anytime; your progress is kept.</p>
           <div style={{display: "flex", alignItems: "center", gap: "16px", marginBottom: "26px", flexWrap: "wrap"}}>
             <div style={{flex: "1", minWidth: "220px", height: "8px", background: "#121A15", borderRadius: "99px", overflow: "hidden"}}>
               <div style={{height: "100%", width: V.progressPct, background: "linear-gradient(90deg,#0E9F6E,#10B981)", borderRadius: "99px", transition: "width .4s"}} />
@@ -23,7 +35,7 @@ export function CandidatePortal({ V }: { V: any }) {
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "15px", fontWeight: "700", color: s?.numColor, width: "30px"}}>{s?.n}</div>
                 <div style={{flex: "1", minWidth: "0"}}>
                   <div style={{fontSize: "16px", fontWeight: "700"}}>{s?.title}</div>
-                  <div style={{fontSize: "12.5px", color: "#8FA396", marginTop: "3px"}}>{"Estimated "}{s?.time}</div>
+                  <div style={{fontSize: "12.5px", color: "#8FA396", marginTop: "3px"}}>{"About "}{s?.time}</div>
                 </div>
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".1em", textTransform: "uppercase", color: s?.statusColor}}>{s?.status}</div>
                 {s?.canGo ? (<>
@@ -32,9 +44,16 @@ export function CandidatePortal({ V }: { V: any }) {
               </div>
             </React.Fragment>))}
           </div>
+          {V.assessmentDone ? (<>
+            <div style={{marginTop: "20px", background: "rgba(16,185,129,.07)", border: "1px solid rgba(16,185,129,.35)", borderRadius: "14px", padding: "22px 24px"}}>
+              <div style={{...KICKER, color: "#34D399"}}>Assessment complete</div>
+              <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "6px"}}>That’s everything we need from you for now.</div>
+              <p style={{margin: "0", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>Your answers are with the talent team. The live combine — a short video session with two evaluators — is scheduled separately; if you move forward you’ll receive a second email with the date, the video link, and your own combine page.</p>
+            </div>
+          </>) : null}
           {V.showStatus ? (<>
-            <div style={{marginTop: "20px", background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "20px 24px"}}>
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "14px"}}>Where your application stands</div>
+            <div style={{marginTop: "16px", ...CARD, padding: "20px 24px"}}>
+              <div style={LABEL}>Where your application stands</div>
               <div style={{display: "flex", flexDirection: "column", gap: "11px"}}>
                 {(V.statusSteps ?? []).map((t: any, $index: number) => (<React.Fragment key={$index}>
                   <div style={{display: "flex", gap: "12px", alignItems: "flex-start"}}>
@@ -46,42 +65,46 @@ export function CandidatePortal({ V }: { V: any }) {
                   </div>
                 </React.Fragment>))}
               </div>
+              {V.combineHref ? (<>
+                <a href={V.combineHref} style={{...GHOST, display: "inline-block", marginTop: "14px", color: "#34D399", borderColor: "rgba(16,185,129,.4)"}}>Open my combine page</a>
+              </>) : null}
             </div>
           </>) : null}
           {V.decisionAdvance ? (<>
             <div style={{marginTop: "16px", background: "rgba(16,185,129,.08)", border: "1px solid rgba(16,185,129,.4)", borderRadius: "14px", padding: "22px 24px"}}>
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#34D399", marginBottom: "8px"}}>Decision</div>
+              <div style={{...KICKER, color: "#34D399"}}>Decision</div>
               <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "6px"}}>We’d like to move forward with you.</div>
-              <p style={{margin: "0 0 14px", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>{V.decisionAdvanceTxt}</p>
-              {V.isDemo ? (<>
-              <div style={{display: "flex", gap: "8px", flexWrap: "wrap"}}>
-                <button style={{background: "#10B981", color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>Pick a time for the call</button>
-                <button style={{background: "transparent", color: "#E9F0EA", border: "1px solid rgba(160,190,170,.3)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>Download decision letter</button>
-              </div>
-              </>) : null}
+              <p style={{margin: "0", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>{V.decisionAdvanceTxt}</p>
             </div>
           </>) : null}
           {V.decisionDecline ? (<>
-            <div style={{marginTop: "16px", background: "#0F1611", border: "1px solid rgba(160,190,170,.2)", borderRadius: "14px", padding: "22px 24px"}}>
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "8px"}}>Decision</div>
+            <div style={{marginTop: "16px", ...CARD, border: "1px solid rgba(160,190,170,.2)"}}>
+              <div style={{...KICKER, color: "#7E9186"}}>Decision</div>
               <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "6px"}}>We won’t be moving forward for this role.</div>
-              <p style={{margin: "0 0 14px", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>Thank you for the time and honesty you put into this. Two trained evaluators reviewed everything you submitted, and the decision was made by the hiring panel — not by any automated score. Your evidence stays on file for 12 months so we can reach out about future openings, unless you ask us to delete it.</p>
-              <div style={{display: "flex", gap: "8px", flexWrap: "wrap"}}>
-                <button style={{background: "transparent", color: "#E9F0EA", border: "1px solid rgba(160,190,170,.3)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>Keep me in mind for future roles</button>
-                <button style={{background: "transparent", color: "#8FA396", border: "1px solid rgba(160,190,170,.3)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer", borderColor: "rgba(160,190,170,.2)"}}>Delete my data</button>
-              </div>
+              <p style={{margin: "0", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>Thank you for the time and honesty you put into this. Two trained evaluators reviewed everything you submitted, and the decision was made by the hiring panel — not by any automated score. Your information stays on file for the retention period so we can reach out about future openings, unless you ask us to delete it.</p>
             </div>
           </>) : null}
         </div>
       </>) : null}
+      {V.vFinished ? (<>
+        <div style={{animation: "fadeUp .4s ease both", maxWidth: "640px"}}>
+          <div style={{...CARD, border: "1px solid rgba(16,185,129,.4)", padding: "28px"}}>
+            <div style={{...KICKER, color: "#34D399"}}>Stage 03 complete</div>
+            <h1 style={H1}>That’s everything.</h1>
+            <p style={{margin: "0 0 14px", fontSize: "14.5px", lineHeight: "1.6", color: "#A7B5AB"}}>Your answers are in and the review has started. There is nothing else to fill out.</p>
+            <p style={{margin: "0 0 20px", fontSize: "13.5px", lineHeight: "1.6", color: "#8FA396"}}>What happens next: the talent team reads your results alongside your details. If you move forward, you’ll get a separate email inviting you to the live combine — a short video session with two evaluators — with its own date, link, and combine page.</p>
+            <button onClick={V.goDash} style={PRIMARY}>Back to my assessment</button>
+          </div>
+        </div>
+      </>) : null}
       {V.vS1 ? (<>
         <div style={{animation: "fadeUp .35s ease both"}}>
-          <button onClick={V.goDash} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "18px"}} className="ps2">← Back to dashboard</button>
-          <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"}}>Stage 01 · Realistic Job Preview</div>
-          <h1 style={{margin: "0 0 10px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(32px,8cqw,41px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"}}>This job, honestly.</h1>
-          <p style={{margin: "0 0 24px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "640px"}}>Peak Sports MGMT builds revenue for college athletics departments. It is a demanding, rewarding sales job — and we would rather you know exactly what it looks like before you invest your time.</p>
-          <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px", marginBottom: "22px"}}>
-            <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "14px"}}>The real nature of the role</div>
+          <button onClick={V.goDash} style={BACK} className="ps2">← Back to dashboard</button>
+          <div style={KICKER}>Stage 01 · Realistic Job Preview</div>
+          <h1 style={H1}>This job, honestly.</h1>
+          <p style={INTRO}>Peak Sports MGMT builds revenue for college athletics departments. It is a demanding, rewarding sales job — and we would rather you know exactly what it looks like before you invest your time.</p>
+          <div style={{...CARD, marginBottom: "22px"}}>
+            <div style={LABEL}>The real nature of the role</div>
             <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(330px,1fr))", gap: "10px 24px"}}>
               {(V.realities ?? []).map((r: any, $index: number) => (<React.Fragment key={$index}>
                 <div style={{display: "flex", gap: "10px", alignItems: "baseline", fontSize: "14px", lineHeight: "1.5", color: "#D5DED7"}}>
@@ -95,40 +118,42 @@ export function CandidatePortal({ V }: { V: any }) {
             <input type="checkbox" checked={!!(V.ack)} onChange={V.toggleAck} style={{width: "18px", height: "18px", accentColor: "#10B981", marginTop: "2px"}} />
             <span style={{fontSize: "14.5px", fontWeight: "600", lineHeight: "1.5"}}>I understand what the role requires and want to continue.</span>
           </label>
-          <div style={{marginBottom: "8px", fontSize: "15px", fontWeight: "700"}}>Which part of this role will challenge you most, and how would you manage it?</div>
-          <p style={{margin: "0 0 10px", fontSize: "12.5px", color: "#8FA396", lineHeight: "1.5"}}>There is no wrong answer here. Naming a real challenge is a sign of self-awareness, not a weakness — it is never scored against you.</p>
-          <textarea value={(V.challenge) ?? ''} onChange={V.setChallenge} rows="4" placeholder="e.g. The volume of rejection early on. I'd manage it by…" style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "14px", color: "#E9F0EA", fontSize: "14px", lineHeight: "1.55", resize: "vertical"}} />
-          <div style={{display: "flex", gap: "12px", marginTop: "20px", alignItems: "center"}}>
-            <button onClick={V.submitS1} disabled={!!(V.s1Blocked)} style={{background: V.s1BtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "13px 26px", fontSize: "14px", fontWeight: "800", cursor: "pointer"}}>{"Acknowledge & continue"}</button>
+          <div style={{marginBottom: "8px", fontSize: "15px", fontWeight: "700"}}>Which part of this role do you expect to challenge you most?</div>
+          <p style={{margin: "0 0 12px", fontSize: "12.5px", color: "#8FA396", lineHeight: "1.5"}}>Pick one. There is no wrong answer — naming a real challenge is a sign of self-awareness, and it is never scored against you.</p>
+          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: "10px"}}>
+            {(V.challengeOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
+              <button onClick={o?.on} style={{background: o?.bg, border: `1px solid ${o?.border}`, borderRadius: "12px", padding: "14px 16px", color: o?.fg, fontSize: "13.5px", lineHeight: "1.45", textAlign: "left", cursor: "pointer", minHeight: "52px"}} className="ps1">{o?.label}</button>
+            </React.Fragment>))}
+          </div>
+          <div style={{display: "flex", gap: "12px", marginTop: "22px", alignItems: "center", flexWrap: "wrap"}}>
+            <button onClick={V.submitS1} disabled={!!(V.s1Blocked)} style={{...PRIMARY, background: V.s1BtnBg}}>{"Acknowledge & continue"}</button>
             <span style={{fontSize: "12.5px", color: "#5C6B61"}}>{V.s1Hint}</span>
           </div>
         </div>
       </>) : null}
       {V.vS2 ? (<>
         <div style={{animation: "fadeUp .35s ease both"}}>
-          <button onClick={V.goDash} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "18px"}} className="ps2">← Back to dashboard</button>
-          <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"}}>Stage 02 · Evidence-Based Application</div>
-          <h1 style={{margin: "0 0 10px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(32px,8cqw,41px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"}}>Show us evidence, not adjectives.</h1>
-          <p style={{margin: "0 0 24px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "640px"}}>We care about what you have actually done. Wherever possible, include real numbers — starting points, targets, results.</p>
-          <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px", marginBottom: "18px"}}>
-            <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "16px"}}>{"Contact & role"}</div>
+          {!V.isInfo ? (<>
+            <button onClick={V.goDash} style={BACK} className="ps2">← Back to dashboard</button>
+          </>) : null}
+          <div style={KICKER}>{V.s2Kicker}</div>
+          <h1 style={H1}>{V.s2Title}</h1>
+          <p style={INTRO}>{V.s2Intro}</p>
+          <div style={{...CARD, marginBottom: "18px"}}>
+            <div style={{...LABEL, marginBottom: "16px"}}>{"Contact & role"}</div>
             <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "14px"}}>
               {(V.appFields ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
                 <div>
-                  <div style={{fontSize: "12.5px", fontWeight: "600", color: "#A7B5AB", marginBottom: "6px"}}>{f?.label}</div>
-                  <input value={(f?.val) ?? ''} onChange={f?.set} placeholder={f?.ph} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "12px 14px", color: "#E9F0EA", fontSize: "14px"}} />
+                  <div style={FIELD}>{f?.label}</div>
+                  <input value={(f?.val) ?? ''} onChange={f?.set} placeholder={f?.ph} style={INPUT} />
                 </div>
               </React.Fragment>))}
               <div>
-                <div style={{fontSize: "12.5px", fontWeight: "600", color: "#A7B5AB", marginBottom: "6px"}}>Role</div>
-                <select value={(V.appRole) ?? ''} onChange={V.setAppRole} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "12px 14px", color: "#E9F0EA", fontSize: "14px"}}>
-                  <option>Sponsorship Sales Consultant</option>
-                  <option>Ticket Sales Consultant</option>
-                  <option>Partnership Development Manager</option>
-                </select>
+                <div style={FIELD}>Role you’re being considered for</div>
+                <div style={{...INPUT, color: "#A7B5AB"}}>{V.appRole}</div>
               </div>
               <div>
-                <div style={{fontSize: "12.5px", fontWeight: "600", color: "#A7B5AB", marginBottom: "6px"}}>Are you legally authorized to work in the United States for this role?</div>
+                <div style={FIELD}>Are you legally authorized to work in the United States for this role?</div>
                 <div style={{display: "flex", gap: "8px"}}>
                   <button onClick={V.authYes} style={{flex: "1", background: V.authYesBg, color: V.authYesFg, border: "1px solid rgba(160,190,170,.2)", borderRadius: "10px", padding: "11px", fontSize: "13.5px", fontWeight: "600", cursor: "pointer"}}>Yes</button>
                   <button onClick={V.authNo} style={{flex: "1", background: V.authNoBg, color: V.authNoFg, border: "1px solid rgba(160,190,170,.2)", borderRadius: "10px", padding: "11px", fontSize: "13.5px", fontWeight: "600", cursor: "pointer"}}>No</button>
@@ -136,51 +161,55 @@ export function CandidatePortal({ V }: { V: any }) {
               </div>
             </div>
             <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "14px", marginTop: "14px"}}>
-              <div role="button" tabIndex="0" onClick={V.toggleResume} style={{border: `1.5px dashed ${V.resumeBorder}`, borderRadius: "10px", padding: "16px", textAlign: "center", cursor: "pointer", background: V.resumeBg}}>
-                <div style={{fontSize: "13.5px", fontWeight: "700", color: V.resumeColor}}>{V.resumeTxt}</div>
-                <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "4px"}}>PDF or DOCX · secure upload · 10 MB max</div>
+              <div>
+                <label style={{display: "block", border: `1.5px dashed ${V.resumeBorder}`, borderRadius: "10px", padding: "16px", textAlign: "center", cursor: "pointer", background: V.resumeBg}}>
+                  <input type="file" accept=".pdf,.doc,.docx,.rtf,.txt" onChange={V.pickResume} style={{display: "none"}} />
+                  <div style={{fontSize: "13.5px", fontWeight: "700", color: V.resumeColor, wordBreak: "break-word"}}>{V.resumeTxt}</div>
+                  <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "4px"}}>{V.resumeSub}</div>
+                </label>
+                {V.resumeMsg ? (<>
+                  <div style={{fontSize: "12px", color: V.resumeMsgColor, marginTop: "6px", lineHeight: "1.5"}}>{V.resumeMsg}</div>
+                </>) : null}
               </div>
               <div>
-                <div style={{fontSize: "12.5px", fontWeight: "600", color: "#A7B5AB", marginBottom: "6px"}}>
+                <div style={FIELD}>
                   {"LinkedIn URL "}
                   <span style={{color: "#5C6B61", fontWeight: "400"}}>(optional)</span>
                 </div>
-                <input value={(V.appLinkedin) ?? ''} onChange={V.setLinkedin} placeholder="linkedin.com/in/…" style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "12px 14px", color: "#E9F0EA", fontSize: "14px"}} />
+                <input value={(V.appLinkedin) ?? ''} onChange={V.setLinkedin} placeholder="linkedin.com/in/…" style={INPUT} />
               </div>
             </div>
           </div>
-          <div style={{display: "flex", flexDirection: "column", gap: "14px"}}>
-            {(V.evItems ?? []).map((q: any, $index: number) => (<React.Fragment key={$index}>
-              <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "20px 24px"}}>
-                <div style={{display: "flex", gap: "12px", alignItems: "baseline", marginBottom: "10px"}}>
-                  <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "12px", fontWeight: "700", color: "#10B981"}}>{q?.num}</span>
-                  <span style={{fontSize: "14.5px", fontWeight: "700", lineHeight: "1.5"}}>{q?.q}</span>
-                </div>
-                <textarea value={(q?.val) ?? ''} onChange={q?.set} rows="4" placeholder="Include real numbers where they apply — starting point, target, result." style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "13px", color: "#E9F0EA", fontSize: "14px", lineHeight: "1.55", resize: "vertical"}} />
-                <div style={{textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: q?.countColor, marginTop: "6px"}}>{q?.count}</div>
-              </div>
-            </React.Fragment>))}
-          </div>
           <label style={{display: "flex", gap: "12px", alignItems: "flex-start", margin: "20px 0", cursor: "pointer"}}>
             <input type="checkbox" checked={!!(V.consent)} onChange={V.toggleConsent} style={{width: "17px", height: "17px", accentColor: "#10B981", marginTop: "2px"}} />
-            <span style={{fontSize: "13px", color: "#A7B5AB", lineHeight: "1.55"}}>I consent to Peak Sports MGMT storing my application materials for the configured retention period. I can request export or deletion of my data at any time.</span>
+            <span style={{fontSize: "13px", color: "#A7B5AB", lineHeight: "1.55"}}>I consent to Peak Sports MGMT storing my details and résumé for the configured retention period. I can request export or deletion of my data at any time.</span>
           </label>
-          <div style={{display: "flex", gap: "12px", alignItems: "center"}}>
-            <button onClick={V.submitS2} disabled={!!(V.s2Blocked)} style={{background: V.s2BtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "13px 26px", fontSize: "14px", fontWeight: "800", cursor: "pointer"}}>Submit application</button>
+          <div style={{display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap"}}>
+            <button onClick={V.submitS2} disabled={!!(V.s2Blocked)} style={{...PRIMARY, background: V.s2BtnBg}}>{V.s2BtnTxt}</button>
             <span style={{fontSize: "12.5px", color: "#5C6B61"}}>{V.s2Hint}</span>
+          </div>
+        </div>
+      </>) : null}
+      {V.vInfoDone ? (<>
+        <div style={{animation: "fadeUp .4s ease both", maxWidth: "640px"}}>
+          <div style={{...CARD, border: "1px solid rgba(16,185,129,.4)", padding: "28px"}}>
+            <div style={{...KICKER, color: "#34D399"}}>Received</div>
+            <h1 style={H1}>{"Thanks, "}{V.candFirst}.</h1>
+            <p style={{margin: "0 0 20px", fontSize: "14.5px", lineHeight: "1.6", color: "#A7B5AB"}}>{V.infoDoneTxt}</p>
+            <button onClick={V.reopenInfo} style={GHOST}>Update my details</button>
           </div>
         </div>
       </>) : null}
       {V.vS3 ? (<>
         <div style={{animation: "fadeUp .35s ease both", maxWidth: "720px"}}>
           <div style={{display: "flex", alignItems: "center", gap: "18px", marginBottom: "18px", flexWrap: "wrap"}}>
-            <button onClick={V.goDash} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0"}} className="ps2">{"← Save & return later"}</button>
+            <button onClick={V.goDash} style={{...BACK, marginBottom: "0"}} className="ps2">{"← Save & return later"}</button>
             {V.bkCanBack ? (<>
               <button onClick={V.bkBack} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", textDecoration: "underline"}} className="ps2">Change previous answer</button>
             </>) : null}
           </div>
-          <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"}}>{"Stage 03 · Sales Decisions · "}{V.bkNum}{" of "}{V.bkTotal}</div>
-          <h1 style={{margin: "0 0 16px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(30px,8cqw,40px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"}}>{V.bkKindLabel}</h1>
+          <div style={KICKER}>{"Stage 03 · Sales Decisions · "}{V.bkNum}{" of "}{V.bkTotal}</div>
+          <h1 style={{...H1, margin: "0 0 16px", fontSize: "clamp(30px,8cqw,40px)"}}>{V.bkKindLabel}</h1>
           <div style={{display: "flex", alignItems: "center", gap: "14px", marginBottom: "18px"}}>
             <div style={{flex: "1", height: "6px", background: "#121A15", borderRadius: "99px", overflow: "hidden"}}>
               <div style={{height: "100%", width: V.bkPct, background: "#10B981", borderRadius: "99px", transition: "width .3s"}} />
@@ -188,7 +217,7 @@ export function CandidatePortal({ V }: { V: any }) {
             <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "12px", color: "#8FA396"}}>~15 min</div>
           </div>
           {V.bkHasText ? (<>
-            <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "24px 26px", marginBottom: "14px"}}>
+            <div style={{...CARD, padding: "24px 26px", marginBottom: "14px"}}>
               <p style={{margin: "0", fontSize: "clamp(16px,4.5cqw,19px)", lineHeight: "1.5", color: "#E9F0EA", fontWeight: "600"}}>{V.bkText}</p>
             </div>
           </>) : null}
@@ -216,39 +245,71 @@ export function CandidatePortal({ V }: { V: any }) {
               </React.Fragment>))}
             </div>
           </>) : null}
-          <p style={{margin: "18px 0 0", fontSize: "11.5px", color: "#5C6B61", lineHeight: "1.55"}}>One decision per screen, about 15 minutes. There are no trick questions and no single answer decides anything — your choices are read alongside your application, your live combine, and your interview, by people rather than software.</p>
+          <p style={{margin: "18px 0 0", fontSize: "11.5px", color: "#5C6B61", lineHeight: "1.55"}}>One decision per screen, about 15 minutes. There are no trick questions and no single answer decides anything — your choices are read alongside your live combine and interview, by people rather than software. The assessment ends with the last question.</p>
         </div>
       </>) : null}
       {V.vS5 ? (<>
         <div style={{animation: "fadeUp .35s ease both"}}>
-          <button onClick={V.goDash} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "18px"}} className="ps2">← Back to dashboard</button>
-          <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"}}>Stage 04 · The Sales Combine</div>
-          <h1 style={{margin: "0 0 10px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(32px,8cqw,41px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"}}>Two exercises. Real conditions.</h1>
-          <p style={{margin: "0 0 24px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "640px"}}>This is where you show us — not tell us. Both exercises are scored by two independent, trained evaluators using behaviorally anchored scales. Exercise A happens live on a video call; Exercise B is submitted beforehand.</p>
+          {!V.isCombine ? (<>
+            <button onClick={V.goDash} style={BACK} className="ps2">← Back to dashboard</button>
+          </>) : null}
+          <div style={KICKER}>{V.candRoleLine}</div>
+          <h1 style={H1}>{V.isCombine ? "Your live combine, " + V.candFirst + "." : "Two exercises. Real conditions."}</h1>
+          <p style={INTRO}>This is where you show us — not tell us. Both exercises are scored by two independent, trained evaluators using behaviorally anchored scales. Exercise A happens live on a video call; Exercise B is submitted beforehand.</p>
           <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "16px"}}>
-            <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "24px"}}>
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "10px"}}>Exercise A · live with evaluators</div>
+            <div style={{...CARD, padding: "24px"}}>
+              <div style={{...KICKER, marginBottom: "10px"}}>Exercise A · live with evaluators</div>
               <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "8px"}}>Sell the Chicken Sandwich</div>
               <p style={{margin: "0 0 16px", fontSize: "13.5px", lineHeight: "1.6", color: "#8FA396"}}>A live video session with two Peak evaluators. Five minutes to prepare, three minutes to sell to a skeptical buyer — then one piece of coaching and a second attempt.</p>
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", letterSpacing: ".08em", textTransform: "uppercase", color: V.s5aStatusColor, marginBottom: "14px"}}>{V.s5aStatus}</div>
               <button onClick={V.goS5a} style={{background: V.s5aBtnBg, color: V.s5aBtnFg, border: V.s5aBtnBorder, borderRadius: "10px", padding: "11px 20px", fontSize: "13.5px", fontWeight: "700", cursor: "pointer"}}>{V.s5aBtnTxt}</button>
             </div>
-            <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "24px"}}>
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "10px"}}>Exercise B</div>
+            <div style={{...CARD, padding: "24px"}}>
+              <div style={{...KICKER, marginBottom: "10px"}}>Exercise B</div>
               <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "8px"}}>The Resourcefulness Case</div>
               <p style={{margin: "0 0 16px", fontSize: "13.5px", lineHeight: "1.6", color: "#8FA396"}}>A $25K property, no lead flow, incomplete CRM, 30 days to build momentum. Show us your first moves, your math, and your fallback plan. Submit it before your live session — your evaluators read it ahead of time.</p>
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", letterSpacing: ".08em", textTransform: "uppercase", color: V.s5bStatusColor, marginBottom: "14px"}}>{V.s5bStatus}</div>
               <button onClick={V.goS5b} style={{background: V.s5bBtnBg, color: V.s5bBtnFg, border: V.s5bBtnBorder, borderRadius: "10px", padding: "11px 20px", fontSize: "13.5px", fontWeight: "700", cursor: "pointer"}}>{V.s5bBtnTxt}</button>
             </div>
           </div>
+          {V.isCombine && V.showStatus ? (<>
+            <div style={{marginTop: "16px", ...CARD, padding: "20px 24px"}}>
+              <div style={LABEL}>Where your application stands</div>
+              <div style={{display: "flex", flexDirection: "column", gap: "11px"}}>
+                {(V.statusSteps ?? []).map((t: any, $index: number) => (<React.Fragment key={$index}>
+                  <div style={{display: "flex", gap: "12px", alignItems: "flex-start"}}>
+                    <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "12px", color: t?.color, width: "16px", paddingTop: "1px"}}>{t?.mark}</span>
+                    <div style={{flex: "1"}}>
+                      <div style={{fontSize: "13.5px", fontWeight: "700", color: t?.color}}>{t?.label}</div>
+                      <div style={{fontSize: "12px", color: "#8FA396", marginTop: "2px", lineHeight: "1.5"}}>{t?.sub}</div>
+                    </div>
+                  </div>
+                </React.Fragment>))}
+              </div>
+            </div>
+          </>) : null}
+          {V.decisionAdvance ? (<>
+            <div style={{marginTop: "16px", background: "rgba(16,185,129,.08)", border: "1px solid rgba(16,185,129,.4)", borderRadius: "14px", padding: "22px 24px"}}>
+              <div style={{...KICKER, color: "#34D399"}}>Decision</div>
+              <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "6px"}}>We’d like to move forward with you.</div>
+              <p style={{margin: "0", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>{V.decisionAdvanceTxt}</p>
+            </div>
+          </>) : null}
+          {V.decisionDecline ? (<>
+            <div style={{marginTop: "16px", ...CARD, border: "1px solid rgba(160,190,170,.2)"}}>
+              <div style={{...KICKER, color: "#7E9186"}}>Decision</div>
+              <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "6px"}}>We won’t be moving forward for this role.</div>
+              <p style={{margin: "0", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>Thank you for the time and honesty you put into this. Two trained evaluators reviewed everything you submitted, and the decision was made by the hiring panel — not by any automated score.</p>
+            </div>
+          </>) : null}
         </div>
       </>) : null}
       {V.vS5a ? (<>
         <div style={{animation: "fadeUp .35s ease both", maxWidth: "680px"}}>
-          <button onClick={V.goS5} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "18px"}} className="ps2">← Back to combine</button>
-          <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"}}>Exercise A · Live session</div>
-          <h1 style={{margin: "0 0 18px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(30px,8cqw,38px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"}}>Your live combine.</h1>
-          <div style={{background: "#0F1611", border: "1px solid rgba(16,185,129,.3)", borderRadius: "14px", padding: "24px 26px", marginBottom: "16px"}}>
+          <button onClick={V.goS5} style={BACK} className="ps2">← Back to combine</button>
+          <div style={KICKER}>Exercise A · Live session</div>
+          <h1 style={{...H1, margin: "0 0 18px", fontSize: "clamp(30px,8cqw,38px)"}}>Your live combine.</h1>
+          <div style={{...CARD, border: "1px solid rgba(16,185,129,.3)", padding: "24px 26px", marginBottom: "16px"}}>
             <div style={{display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-end"}}>
               <div>
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "4px"}}>When</div>
@@ -261,12 +322,12 @@ export function CandidatePortal({ V }: { V: any }) {
             </div>
             <div style={{display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "18px", alignItems: "center"}}>
               {V.joinHref ? (<>
-                <a href={V.joinHref} target="_blank" rel="noreferrer" style={{background: "#10B981", color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer", textDecoration: "none"}}>Join the session</a>
+                <a href={V.joinHref} target="_blank" rel="noreferrer" style={{...PRIMARY, padding: "11px 18px", fontSize: "13px", textDecoration: "none"}}>Join the session</a>
               </>) : (<>
-                <button disabled={!!(V.joinDisabled)} style={{background: "#20302680", color: "#5C6B61", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "not-allowed"}}>{V.isDemo ? 'Join — opens 10 min before' : 'Join link arrives with your session'}</button>
+                <button disabled style={{background: "#20302680", color: "#5C6B61", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "not-allowed"}}>{V.isDemo ? 'Join — opens 10 min before' : 'Join link arrives with your session'}</button>
               </>)}
-              {V.isDemo ? (<>
-              <button style={{background: "transparent", color: "#E9F0EA", border: "1px solid rgba(160,190,170,.3)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>Add to calendar</button>
+              {V.gcalHref ? (<>
+                <a href={V.gcalHref} target="_blank" rel="noreferrer" style={GHOST}>Add to Google Calendar</a>
               </>) : null}
               {V.notResched ? (<>
                 <button onClick={V.askResched} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0 6px", textDecoration: "underline"}} className="ps2">Request a different time</button>
@@ -276,8 +337,8 @@ export function CandidatePortal({ V }: { V: any }) {
               </>) : null}
             </div>
           </div>
-          <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px", marginBottom: "16px"}}>
-            <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "12px"}}>What happens on the call</div>
+          <div style={{...CARD, marginBottom: "16px"}}>
+            <div style={{...LABEL, marginBottom: "12px"}}>What happens on the call</div>
             <div style={{display: "flex", flexDirection: "column", gap: "9px", fontSize: "13.5px", color: "#D5DED7", lineHeight: "1.55"}}>
               <div>1 · Two evaluators introduce themselves. One plays a skeptical buyer.</div>
               <div>2 · Five minutes to prepare a three-minute pitch for a chicken sandwich. The product is deliberately simple — we are watching how you discover needs, handle resistance, and ask for a next step.</div>
@@ -299,11 +360,11 @@ export function CandidatePortal({ V }: { V: any }) {
       </>) : null}
       {V.vS5b ? (<>
         <div style={{animation: "fadeUp .35s ease both", maxWidth: "720px"}}>
-          <button onClick={V.goS5} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", marginBottom: "18px"}} className="ps2">← Back to combine</button>
-          <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "8px"}}>Exercise B · The Resourcefulness Case</div>
-          <h1 style={{margin: "0 0 18px", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", fontSize: "clamp(30px,8cqw,38px)", fontWeight: "700", letterSpacing: ".01em", lineHeight: "1"}}>Build momentum from almost nothing.</h1>
-          <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "24px 26px", marginBottom: "20px"}}>
-            <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "10px"}}>Your brief (fictional)</div>
+          <button onClick={V.goS5} style={BACK} className="ps2">← Back to combine</button>
+          <div style={KICKER}>Exercise B · The Resourcefulness Case</div>
+          <h1 style={{...H1, margin: "0 0 18px", fontSize: "clamp(30px,8cqw,38px)"}}>Build momentum from almost nothing.</h1>
+          <div style={{...CARD, padding: "24px 26px", marginBottom: "20px"}}>
+            <div style={{...LABEL, marginBottom: "10px"}}>Your brief (fictional)</div>
             <p style={{margin: "0", fontSize: "14.5px", lineHeight: "1.7", color: "#D5DED7"}}>
               {"You have joined a university athletics property currently generating approximately "}
               <b>$25,000</b>
@@ -312,7 +373,7 @@ export function CandidatePortal({ V }: { V: any }) {
               {" to build momentum. You have access to a laptop, phone, CRM, university stakeholders, and public market information."}
             </p>
           </div>
-          <div style={{display: "flex", gap: "8px", marginBottom: "18px"}}>
+          <div style={{display: "flex", gap: "8px", marginBottom: "18px", flexWrap: "wrap"}}>
             {(V.caseModes ?? []).map((m: any, $index: number) => (<React.Fragment key={$index}>
               <button onClick={m?.on} style={{background: m?.bg, color: m?.fg, border: "1px solid rgba(160,190,170,.2)", borderRadius: "99px", padding: "8px 16px", fontSize: "12.5px", fontWeight: "700", cursor: "pointer"}}>{m?.label}</button>
             </React.Fragment>))}
@@ -320,23 +381,27 @@ export function CandidatePortal({ V }: { V: any }) {
           {V.caseWritten ? (<>
             <div style={{display: "flex", flexDirection: "column", gap: "14px"}}>
               {(V.caseItems ?? []).map((c: any, $index: number) => (<React.Fragment key={$index}>
-                <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "18px 22px"}}>
+                <div style={{...CARD, padding: "18px 22px"}}>
                   <div style={{fontSize: "14px", fontWeight: "700", marginBottom: "8px"}}>
                     <span style={{fontFamily: "'JetBrains Mono',monospace", color: "#10B981", marginRight: "8px"}}>{c?.num}</span>
                     {c?.q}
                   </div>
-                  <textarea value={(c?.val) ?? ''} onChange={c?.set} rows="3" placeholder="Be specific — names of channels, numbers, sequence." style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "12px", color: "#E9F0EA", fontSize: "14px", lineHeight: "1.55", resize: "vertical"}} />
+                  <textarea value={(c?.val) ?? ''} onChange={c?.set} rows={3} placeholder="Be specific — names of channels, numbers, sequence." style={{...INPUT, padding: "12px", lineHeight: "1.55", resize: "vertical"}} />
                 </div>
               </React.Fragment>))}
             </div>
           </>) : null}
           {V.caseUpload ? (<>
-            <div role="button" tabIndex="0" onClick={V.toggleRecorded} style={{border: `1.5px dashed ${V.recBorder}`, background: V.recBg, borderRadius: "14px", padding: "44px", textAlign: "center", cursor: "pointer"}}>
-              <div style={{fontSize: "15px", fontWeight: "800", color: V.recColor}}>{V.caseUpTxt}</div>
+            <label style={{display: "block", border: `1.5px dashed ${V.recBorder}`, background: V.recBg, borderRadius: "14px", padding: "44px", textAlign: "center", cursor: "pointer"}}>
+              <input type="file" accept=".pdf,.ppt,.pptx,.key,.doc,.docx,.mp4,.mov,.webm,.m4v,.mp3,.m4a" onChange={V.pickCaseFile} style={{display: "none"}} />
+              <div style={{fontSize: "15px", fontWeight: "800", color: V.recColor, wordBreak: "break-word"}}>{V.caseUpTxt}</div>
               <div style={{fontSize: "12px", color: "#5C6B61", marginTop: "6px"}}>{V.caseUpSub}</div>
-            </div>
+            </label>
+            {V.caseMsg ? (<>
+              <div style={{fontSize: "12px", color: V.caseMsgColor, marginTop: "8px", lineHeight: "1.5"}}>{V.caseMsg}</div>
+            </>) : null}
           </>) : null}
-          <button onClick={V.submitS5b} disabled={!!(V.s5bBlocked)} style={{background: V.s5bSubmitBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "13px 26px", fontSize: "14px", fontWeight: "800", cursor: "pointer", marginTop: "20px"}}>Submit Exercise B</button>
+          <button onClick={V.submitS5b} disabled={!!(V.s5bBlocked)} style={{...PRIMARY, background: V.s5bSubmitBg, marginTop: "20px"}}>Submit Exercise B</button>
         </div>
       </>) : null}
       <div style={{marginTop: "44px", borderTop: "1px solid rgba(160,190,170,.1)", paddingTop: "18px", display: "flex", gap: "22px", flexWrap: "wrap", alignItems: "center"}}>
@@ -353,10 +418,10 @@ export function CandidatePortal({ V }: { V: any }) {
       <div style={{marginTop: "16px"}}>
         <button onClick={V.toggleAccom} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", fontWeight: "600", cursor: "pointer", padding: "0", textDecoration: "underline"}} className="ps5">Request an accommodation</button>
         {V.accomOpen ? (<>
-          <div style={{marginTop: "14px", background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "20px 22px", maxWidth: "640px"}}>
+          <div style={{marginTop: "14px", ...CARD, padding: "20px 22px", maxWidth: "640px"}}>
             <p style={{margin: "0 0 12px", fontSize: "13.5px", color: "#A7B5AB", lineHeight: "1.6"}}>Additional time, alternative formats, captions, screen-reader support, or anything else you need — requesting an accommodation never affects your evaluation.</p>
             {V.accomNotSent ? (<>
-              <textarea value={(V.accomTxt) ?? ''} onChange={V.setAccomTxt} rows="3" placeholder="Tell us what would help…" style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "12px", color: "#E9F0EA", fontSize: "14px", resize: "vertical"}} />
+              <textarea value={(V.accomTxt) ?? ''} onChange={V.setAccomTxt} rows={3} placeholder="Tell us what would help…" style={{...INPUT, padding: "12px", resize: "vertical"}} />
               <button onClick={V.sendAccom} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.4)", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer", marginTop: "10px"}}>Send to the talent team</button>
             </>) : null}
             {V.accomSent ? (<>

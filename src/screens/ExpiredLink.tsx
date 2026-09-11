@@ -46,6 +46,13 @@ export function ExpiredLink({ V }: { V: any }) {
       <button onClick={V.reopenLink} style={primary}>Back to my assessment</button>
     </div>
   );
+  if (V.combineExpired) return main(
+    <div style={card("rgba(245,184,74,.35)")}>
+      <div style={kicker("#F5B84A")}>Combine link expired</div>
+      <h1 style={h1}>This combine page is no longer active.</h1>
+      <p style={body}>Combine links stay open until two weeks after the session. If you still need something from this page, reply to your session email and the team will help.</p>
+    </div>
+  );
   if (V.inviteInvalid) return main(
     <div style={card("rgba(248,113,113,.35)")}>
       <div style={kicker("#F87171")}>Link not recognized</div>

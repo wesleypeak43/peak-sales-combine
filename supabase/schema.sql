@@ -134,6 +134,47 @@ create table if not exists public.audit (
   what text not null
 );
 
+-- ---------- v3.1 additions (safe on an existing database) ----------
+-- Candidates: which link they got, how they entered the pipeline, their details and résumé, and the school / property the role is for.
+alter table public.candidates
+  add column if not exists track text not null default 'assessment',   -- 'assessment' (full link) | 'info' (details-only link)
+  add column if not exists source text not null default 'invite',      -- 'invite' | 'manual'
+  add column if not exists loc text not null default '',
+  add column if not exists school text not null default '',
+  add column if not exists program text not null default '',           -- e.g. "Texas Tech Athletics" — shown in the invite email and portal
+  add column if not exists linkedin text not null default '',
+  add column if not exists resume_path text,
+  add column if not exists resume_name text,
+  add column if not exists notes text not null default '';
+
+-- Sessions: a personal combine link (separate from the assessment link), a real start time, and the calendar event behind it.
+alter table public.sessions
+  add column if not exists token text unique default encode(gen_random_bytes(24), 'hex'),
+  add column if not exists starts_at timestamptz,
+  add column if not exists duration_min int not null default 60,
+  add column if not exists calendar_event_id text,
+  add column if not exists notified_at timestamptz;
+update public.sessions set token = encode(gen_random_bytes(24), 'hex') where token is null;
+
+-- Transcripts (mock pitch, phone screen, interview) submitted by staff for review.
+create table if not exists public.transcripts (
+  id uuid primary key default gen_random_uuid(),
+  candidate_id uuid not null references public.candidates(id) on delete cascade,
+  kind text not null default 'Mock pitch (Exercise A)',
+  title text not null default '',
+  txt text not null,
+  source_name text not null default '',
+  uploaded_by uuid references public.staff(id),
+  review jsonb,
+  review_status text not null default 'none',   -- none | pending | done | failed | off
+  created_at timestamptz not null default now()
+);
+
+-- Three hiring profiles. Candidates invited under the earlier role titles are moved to the matching profile.
+update public.candidates set role = 'Entry Level Sales Professional' where role in ('Sponsorship Sales Consultant', 'Ticket Sales Consultant');
+update public.candidates set role = 'Director of Sales' where role in ('Partnership Development Manager', 'Regional Sales Director');
+update public.candidates set role = 'Director of Service' where role in ('Account Manager');
+
 -- ---------- who is asking? ----------
 create or replace function public.current_staff_id() returns uuid
 language sql stable security definer set search_path = public as $$
@@ -183,6 +224,15 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.interviews i where i.candidate_id = cid and i.evaluator_id = public.current_staff_id())
 $$;
 
+-- Storage paths look like resumes/<candidate id>/<file>; this pulls the candidate id out safely.
+create or replace function public.path_candidate(p_name text) returns uuid
+language plpgsql immutable as $$
+begin
+  return split_part(p_name, '/', 2)::uuid;
+exception when others then
+  return null;
+end $$;
+
 -- ---------- row-level security ----------
 alter table public.staff enable row level security;
 alter table public.candidates enable row level security;
@@ -196,6 +246,7 @@ alter table public.accommodation_details enable row level security;
 alter table public.settings enable row level security;
 alter table public.outcomes enable row level security;
 alter table public.audit enable row level security;
+alter table public.transcripts enable row level security;
 
 drop policy if exists staff_select on public.staff;
 drop policy if exists staff_admin_all on public.staff;
@@ -269,6 +320,25 @@ drop policy if exists audit_insert on public.audit;
 create policy audit_select on public.audit for select to authenticated using (public.has_role('admin') or public.has_role('leadership'));
 create policy audit_insert on public.audit for insert to authenticated with check (public.is_staff());
 
+-- Transcripts are written through /api/transcript (server); staff and assigned evaluators can read them.
+drop policy if exists tr_select on public.transcripts;
+create policy tr_select on public.transcripts for select to authenticated using (public.is_pipeline_staff() or public.assigned_to_me(candidate_id));
+
+-- ---------- files (résumés, Exercise B uploads) ----------
+-- Private bucket. Candidates upload through short-lived signed URLs issued by /api/upload; staff read through signed download links.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('candidate-files', 'candidate-files', false, 15728640)
+on conflict (id) do update set public = false, file_size_limit = 15728640;
+drop policy if exists cf_staff_read on storage.objects;
+drop policy if exists cf_staff_insert on storage.objects;
+drop policy if exists cf_staff_update on storage.objects;
+create policy cf_staff_read on storage.objects for select to authenticated
+  using (bucket_id = 'candidate-files' and (public.is_pipeline_staff() or public.assigned_to_me(public.path_candidate(name))));
+create policy cf_staff_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'candidate-files' and public.can_manage());
+create policy cf_staff_update on storage.objects for update to authenticated
+  using (bucket_id = 'candidate-files' and public.can_manage());
+
 -- ---------- candidate access (by personal link token; no login) ----------
 create or replace function public.candidate_open(p_token text) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -298,9 +368,10 @@ begin
   select count(*) into n_evals from public.evaluations where candidate_id = c.id;
   return jsonb_build_object(
     'status', 'ok',
-    'candidate', jsonb_build_object('id', c.id, 'name', c.name, 'email', c.email, 'role', c.role, 'expires_at', c.invite_expires_at),
+    'candidate', jsonb_build_object('id', c.id, 'name', c.name, 'email', c.email, 'phone', c.phone, 'role', c.role, 'expires_at', c.invite_expires_at,
+      'track', c.track, 'source', c.source, 'program', c.program, 'loc', c.loc, 'school', c.school, 'linkedin', c.linkedin, 'resume_name', c.resume_name),
     'progress', c.progress,
-    'session', case when s.id is null then null else jsonb_build_object('when', s.when_txt, 'link', s.link) end,
+    'session', case when s.id is null then null else jsonb_build_object('when', s.when_txt, 'link', s.link, 'starts_at', s.starts_at, 'token', s.token) end,
     'accommodation', case when a.id is null then null else jsonb_build_object('status', a.status, 'resolution', a.resolution) end,
     'decision', case when d.id is null then null else d.decision end,
     'review', case when r.id is null then null else r.outcome end,
@@ -320,6 +391,15 @@ begin
     return jsonb_build_object('status', 'invalid');
   end if;
   update public.candidates set progress = progress || coalesce(p_patch, '{}'::jsonb) where id = c.id;
+  -- Contact details typed by the candidate are mirrored onto the record so the pipeline shows them without digging into progress.
+  if p_patch ? 'app' then
+    update public.candidates set
+      phone = coalesce(nullif(trim(p_patch -> 'app' ->> 'phone'), ''), phone),
+      loc = coalesce(nullif(trim(p_patch -> 'app' ->> 'loc'), ''), loc),
+      school = coalesce(nullif(trim(p_patch -> 'app' ->> 'school'), ''), school),
+      linkedin = coalesce(nullif(trim(p_patch -> 'app' ->> 'linkedin'), ''), linkedin)
+    where id = c.id;
+  end if;
   if coalesce((p_patch ->> 'accomSent')::boolean, false)
      and not exists (select 1 from public.accommodations where candidate_id = c.id and status = 'Open') then
     reason := coalesce(nullif(trim(coalesce(p_patch ->> 'accomTxt', c.progress ->> 'accomTxt')), ''), '(no detail provided)');
@@ -335,6 +415,58 @@ end $$;
 
 grant execute on function public.candidate_open(text) to anon, authenticated;
 grant execute on function public.candidate_save(text, jsonb) to anon, authenticated;
+
+-- ---------- combine access (by the session's own link; separate from the assessment link) ----------
+create or replace function public.combine_open(p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  s public.sessions;
+  c public.candidates;
+  d public.decisions;
+  n_evals int;
+begin
+  select * into s from public.sessions where token = p_token;
+  if not found then
+    return jsonb_build_object('status', 'invalid');
+  end if;
+  select * into c from public.candidates where id = s.candidate_id and not archived;
+  if not found then
+    return jsonb_build_object('status', 'invalid');
+  end if;
+  if coalesce(s.starts_at, s.created_at) + interval '14 days' < now() then
+    return jsonb_build_object('status', 'expired');
+  end if;
+  select * into d from public.decisions where candidate_id = c.id order by created_at desc limit 1;
+  select count(*) into n_evals from public.evaluations where candidate_id = c.id;
+  return jsonb_build_object(
+    'status', 'ok',
+    'candidate', jsonb_build_object('id', c.id, 'name', c.name, 'role', c.role, 'program', c.program),
+    'session', jsonb_build_object('when', s.when_txt, 'link', s.link, 'starts_at', s.starts_at, 'duration', s.duration_min, 'token', s.token),
+    'progress', c.progress - 'bkAns' - 'bkIdx',
+    'decision', case when d.id is null then null else d.decision end,
+    'evaluations', n_evals
+  );
+end $$;
+
+create or replace function public.combine_save(p_token text, p_patch jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  ctoken text;
+  allowed jsonb;
+begin
+  select c.token into ctoken from public.sessions s join public.candidates c on c.id = s.candidate_id
+    where s.token = p_token and not c.archived limit 1;
+  if ctoken is null then
+    return jsonb_build_object('status', 'invalid');
+  end if;
+  select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) into allowed
+    from jsonb_each(coalesce(p_patch, '{}'::jsonb))
+    where key in ('caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'done');
+  return public.candidate_save(ctoken, allowed);
+end $$;
+
+grant execute on function public.combine_open(text) to anon, authenticated;
+grant execute on function public.combine_save(text, jsonb) to anon, authenticated;
 
 -- ---------- bookkeeping triggers ----------
 create or replace function public.handle_auth_signin() returns trigger
@@ -369,6 +501,9 @@ begin
   elsif tg_table_name = 'interviews' then
     select short into who from public.staff where id = new.evaluator_id;
     what := 'Submitted interview scores — ' || coalesce(cname, '');
+  elsif tg_table_name = 'transcripts' then
+    select short into who from public.staff where id = new.uploaded_by;
+    what := 'Submitted transcript for review — ' || coalesce(cname, '') || ' · ' || new.kind;
   end if;
   insert into public.audit (who, what) values (coalesce(who, 'Staff'), coalesce(what, tg_table_name));
   return new;
@@ -379,17 +514,19 @@ drop trigger if exists audit_sessions on public.sessions;
 drop trigger if exists audit_reviews on public.reviews;
 drop trigger if exists audit_evaluations on public.evaluations;
 drop trigger if exists audit_interviews on public.interviews;
+drop trigger if exists audit_transcripts on public.transcripts;
 create trigger audit_decisions after insert on public.decisions for each row execute function public.audit_row();
 create trigger audit_sessions after insert on public.sessions for each row execute function public.audit_row();
 create trigger audit_reviews after insert on public.reviews for each row execute function public.audit_row();
 create trigger audit_evaluations after insert on public.evaluations for each row execute function public.audit_row();
 create trigger audit_interviews after insert on public.interviews for each row execute function public.audit_row();
+create trigger audit_transcripts after insert on public.transcripts for each row execute function public.audit_row();
 
 -- ---------- live updates between staff browsers ----------
 do $$
 declare t text;
 begin
-  foreach t in array array['candidates','reviews','sessions','evaluations','interviews','decisions','accommodations','settings','staff','outcomes','audit']
+  foreach t in array array['candidates','reviews','sessions','evaluations','interviews','decisions','accommodations','settings','staff','outcomes','audit','transcripts']
   loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);

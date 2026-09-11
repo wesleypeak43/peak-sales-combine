@@ -52,6 +52,28 @@ export function EvaluatorCockpit({ V }: { V: any }) {
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".06em", textTransform: "uppercase", color: f?.fg, background: f?.bg, border: `1px solid ${f?.border}`, padding: "4px 9px", borderRadius: "99px"}}>{f?.label}</span>
                   </React.Fragment>))}
                 </div>
+                {V.liveResume || V.liveCaseFile ? (<>
+                  <div style={{display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "12px"}}>
+                    {V.liveResume ? (<><button onClick={V.openLiveResume} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "6px 11px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer"}}>{"Résumé · " + V.liveResume}</button></>) : null}
+                    {V.liveCaseFile ? (<><button onClick={V.openLiveCaseFile} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "6px 11px", fontSize: "11.5px", fontWeight: "700", cursor: "pointer"}}>{"Exercise B file · " + V.liveCaseFile}</button></>) : null}
+                  </div>
+                </>) : null}
+                {(V.liveTranscripts ?? []).length ? (<>
+                  <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "#7E9186", marginTop: "14px", marginBottom: "6px"}}>Transcripts on file</div>
+                  <div style={{display: "flex", flexDirection: "column", gap: "8px"}}>
+                    {(V.liveTranscripts ?? []).map((t: any, $index: number) => (<React.Fragment key={$index}>
+                      <div style={{background: "#0B120E", borderRadius: "10px", padding: "10px 12px"}}>
+                        <div style={{display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap"}}>
+                          <div style={{flex: "1", fontSize: "12.5px", fontWeight: "700"}}>{t?.title}<span style={{color: "#5C6B61", fontWeight: "400"}}>{" · "}{t?.meta}</span></div>
+                          <button onClick={t?.toggle} style={{background: "transparent", color: "#A7B5AB", border: "1px solid rgba(160,190,170,.2)", borderRadius: "8px", padding: "5px 10px", fontSize: "11px", fontWeight: "700", cursor: "pointer"}}>{t?.toggleTxt}</button>
+                        </div>
+                        {t?.show ? (<>
+                          <pre style={{margin: "8px 0 0", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "12px", lineHeight: "1.55", color: "#A7B5AB", maxHeight: "300px", overflow: "auto"}}>{t?.txt}</pre>
+                        </>) : null}
+                      </div>
+                    </React.Fragment>))}
+                  </div>
+                </>) : null}
               </div>
               <div style={{background: "#0F1611", border: "1px solid rgba(16,185,129,.28)", borderRadius: "14px", padding: "22px", textAlign: "center"}}>
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".18em", textTransform: "uppercase", color: "#7E9186", marginBottom: "8px"}}>{V.liveTimerLabel}</div>

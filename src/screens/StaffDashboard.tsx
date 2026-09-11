@@ -36,13 +36,15 @@ export function StaffDashboard({ V }: { V: any }) {
                   <div style={{fontSize: "15px", fontWeight: "800"}}>{r?.title}</div>
                   <div style={{fontSize: "12.5px", color: "#8FA396", margin: "4px 0 12px"}}>{r?.prop}</div>
                   <div style={{display: "flex", gap: "16px", fontFamily: "'JetBrains Mono',monospace", fontSize: "11.5px", color: "#A7B5AB"}}>
+                    {r?.open != null ? (<>
                     <span>
                       <b style={{color: "#34D399"}}>{r?.open}</b>
                       {" open"}
                     </span>
+                    </>) : null}
                     <span>
                       <b style={{color: "#E9F0EA"}}>{r?.apps}</b>
-                      {" applicants"}
+                      {" candidates"}
                     </span>
                     <span style={{color: "#7E9186"}}>{r?.stage}</span>
                   </div>
@@ -64,8 +66,8 @@ export function StaffDashboard({ V }: { V: any }) {
           <p style={{margin: "0 0 18px", fontSize: "12.5px", color: "#8FA396", maxWidth: "720px", lineHeight: "1.55"}}>Blind review hides names, photos, and school names during early screening. Candidates are compared against the role standard — never ranked by prestige, polish, or similarity to current leaders.</p>
           {V.showInviteForm ? (<>
             <div style={{background: "#0F1611", border: "1px solid rgba(16,185,129,.25)", borderRadius: "14px", padding: "20px 22px", marginBottom: "18px"}}>
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "12px"}}>Invite a candidate</div>
-              <div style={{display: "grid", gridTemplateColumns: "1.3fr 1.4fr 1fr 1.4fr", gap: "10px"}}>
+              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#10B981", marginBottom: "12px"}}>Add a candidate</div>
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "10px"}}>
                 <input value={(V.ncName) ?? ''} onChange={V.setNcName} placeholder="Full name" style={INPUT} />
                 <input value={(V.ncEmail) ?? ''} onChange={V.setNcEmail} placeholder="Email" style={INPUT} />
                 <input value={(V.ncPhone) ?? ''} onChange={V.setNcPhone} placeholder="Phone (optional)" style={INPUT} />
@@ -75,10 +77,30 @@ export function StaffDashboard({ V }: { V: any }) {
                   </React.Fragment>))}
                 </select>
               </div>
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "10px", marginTop: "10px"}}>
+                <input value={(V.ncProgram) ?? ''} onChange={V.setNcProgram} placeholder="Hiring for — school / property (e.g. Texas Tech Athletics)" style={INPUT} />
+                <input value={(V.ncLoc) ?? ''} onChange={V.setNcLoc} placeholder="Location (optional)" style={INPUT} />
+                <input value={(V.ncSchool) ?? ''} onChange={V.setNcSchool} placeholder="Their school / current org (optional)" style={INPUT} />
+                <input value={(V.ncLinkedin) ?? ''} onChange={V.setNcLinkedin} placeholder="LinkedIn URL (optional)" style={INPUT} />
+              </div>
+              <div style={{display: "flex", gap: "10px", alignItems: "stretch", marginTop: "12px", flexWrap: "wrap"}}>
+                {(V.ncTracks ?? []).map((t: any, $index: number) => (<React.Fragment key={$index}>
+                  <button onClick={t?.on} style={{flex: "1 1 220px", textAlign: "left", background: t?.bg, color: t?.fg, border: `1px solid ${t?.border}`, borderRadius: "10px", padding: "10px 14px", cursor: "pointer"}}>
+                    <div style={{fontSize: "13px", fontWeight: "800"}}>{t?.label}</div>
+                    <div style={{fontSize: "11.5px", color: "#7E9186", marginTop: "2px"}}>{t?.d}</div>
+                  </button>
+                </React.Fragment>))}
+                <label style={{flex: "1 1 220px", display: "flex", flexDirection: "column", justifyContent: "center", border: `1.5px dashed ${V.ncFileName ? 'rgba(16,185,129,.5)' : 'rgba(160,190,170,.3)'}`, borderRadius: "10px", padding: "10px 14px", cursor: "pointer", background: V.ncFileName ? 'rgba(16,185,129,.06)' : 'transparent'}}>
+                  <input type="file" accept=".pdf,.doc,.docx,.rtf,.txt" onChange={V.pickNcFile} style={{display: "none"}} />
+                  <div style={{fontSize: "13px", fontWeight: "800", color: V.ncFileName ? '#34D399' : '#A7B5AB', wordBreak: "break-word"}}>{V.ncFileName || 'Attach résumé (optional)'}</div>
+                  <div style={{fontSize: "11.5px", color: "#7E9186", marginTop: "2px"}}>{V.ncFileName ? 'Click to replace' : 'PDF or Word · 15 MB max'}</div>
+                </label>
+              </div>
               <div style={{display: "flex", gap: "8px", alignItems: "center", marginTop: "12px", flexWrap: "wrap"}}>
-                <button onClick={V.ncEmailInvite} disabled={!!(V.ncBlocked)} style={{background: V.ncBtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>{"Create & email invite"}</button>
-                <button onClick={V.ncCopyInvite} disabled={!!(V.ncBlocked)} style={{background: "transparent", color: V.ncBlocked ? "#3A453D" : "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>{"Create & copy link"}</button>
-                <span style={{fontSize: "12px", color: "#5C6B61"}}>The link is personal to this candidate and expires 3 days after it is sent.</span>
+                <button onClick={V.ncEmailInvite} disabled={!!(V.ncBlocked)} style={{background: V.ncBtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>{V.ncBusy ? 'Working…' : 'Add & email ' + V.ncLinkLabel}</button>
+                <button onClick={V.ncCopyInvite} disabled={!!(V.ncBlocked)} style={{background: "transparent", color: V.ncBlocked ? "#3A453D" : "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>{"Add & copy " + V.ncLinkLabel}</button>
+                <button onClick={V.ncManual} disabled={!!(V.ncBlocked)} style={{background: "transparent", color: V.ncBlocked ? "#3A453D" : "#A7B5AB", border: "1px solid rgba(160,190,170,.25)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>Add without sending a link</button>
+                <span style={{fontSize: "12px", color: "#5C6B61"}}>Links are personal and expire 3 days after they are sent. The school / property you type here is what the candidate sees in their email and portal.</span>
               </div>
               {V.ncSaved ? (<>
                 <div style={{fontSize: "12.5px", color: V.ncSavedColor, fontWeight: "700", marginTop: "10px", wordBreak: "break-all"}}>{V.ncSaved}</div>
@@ -99,6 +121,9 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div>
                   <div style={{fontSize: "14.5px", fontWeight: "700"}}>{p?.dName}</div>
                   <div style={{fontSize: "11.5px", color: "#5C6B61"}}>{p?.dSub}</div>
+                  {p?.tag || p?.hasResume ? (<>
+                    <div style={{fontSize: "10.5px", color: "#7E9186", marginTop: "3px", fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".04em"}}>{[p?.tag, p?.hasResume ? 'Résumé on file' : ''].filter(Boolean).join(' · ')}</div>
+                  </>) : null}
                   {p?.inviteState ? (<>
                     <div style={{fontSize: "11px", color: p?.inviteColor, marginTop: "3px"}}>{p?.inviteState}</div>
                   </>) : null}
@@ -123,11 +148,14 @@ export function StaffDashboard({ V }: { V: any }) {
                     <button onClick={p?.resend} style={{background: "transparent", color: "#E9D9B0", border: "1px solid rgba(245,184,74,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{p?.resendTxt}</button>
                     <button onClick={p?.copy} style={{background: "transparent", color: "#A7B5AB", border: "1px solid rgba(160,190,170,.2)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>Copy link</button>
                   </>) : null}
+                  {p?.showUpgrade ? (<>
+                    <button onClick={p?.upgrade} title="Switches this candidate to the full assessment and emails that link" style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{p?.upgradeTxt}</button>
+                  </>) : null}
                 </div>
               </div>
             </React.Fragment>))}
             {V.pipeEmpty ? (<>
-              <div style={{padding: "26px 22px", fontSize: "13.5px", color: "#8FA396", lineHeight: "1.6"}}>No candidates yet. Invite the first one above — they get a personal link and appear here the moment the record is created.</div>
+              <div style={{padding: "26px 22px", fontSize: "13.5px", color: "#8FA396", lineHeight: "1.6"}}>No candidates yet. Add the first one above — with a link (full assessment or details only) or manually with a résumé — and they appear here the moment the record is created.</div>
             </>) : null}
           </div>
           {V.canCompare ? (<>
@@ -160,10 +188,51 @@ export function StaffDashboard({ V }: { V: any }) {
               </div>
             </div>
           </div>
+          <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "18px 22px", marginBottom: "20px"}}>
+            <div style={{display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "12px"}}>
+              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", flex: "1"}}>Candidate details</div>
+              {V.pHasResume ? (<>
+                <button onClick={V.openResume} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{"Open résumé · " + V.pResumeName}</button>
+              </>) : (<>
+                <span style={{fontSize: "12px", color: "#5C6B61"}}>No résumé on file</span>
+              </>)}
+              {V.pCaseFile ? (<>
+                <button onClick={V.openCaseFile} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{"Exercise B file · " + V.pCaseFile}</button>
+              </>) : null}
+              {V.pLinkedinHref ? (<>
+                <a href={V.pLinkedinHref} target="_blank" rel="noreferrer" style={{color: "#5B9BFF", fontSize: "12px", fontWeight: "700", textDecoration: "none", border: "1px solid rgba(91,155,255,.35)", borderRadius: "8px", padding: "7px 13px"}}>LinkedIn</a>
+              </>) : null}
+            </div>
+            <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: "10px 18px"}}>
+              {(V.pDetails ?? []).map((d: any, $index: number) => (<React.Fragment key={$index}>
+                <div>
+                  <div style={MONO_LABEL}>{d?.label}</div>
+                  <div style={{fontSize: "13px", color: "#D5DED7", marginTop: "3px", wordBreak: "break-word"}}>{d?.val}</div>
+                </div>
+              </React.Fragment>))}
+            </div>
+            {V.pFileMsg ? (<><div style={{fontSize: "12px", color: "#F5B84A", marginTop: "10px"}}>{V.pFileMsg}</div></>) : null}
+            {V.pCanEdit ? (<>
+              <div style={{marginTop: "14px"}}>
+                <div style={MONO_LABEL}>Staff notes · never shown to the candidate or to evaluators</div>
+                <textarea value={(V.pNotes) ?? ''} onChange={V.setPNotes} rows={2} placeholder="Phone-screen impressions, referral source, availability…" style={{...INPUT, marginTop: "6px", resize: "vertical", lineHeight: "1.5"}} />
+                {V.notesDirty ? (<>
+                  <button onClick={V.savePNotes} style={{background: "#10B981", color: "#04120B", border: "none", borderRadius: "8px", padding: "8px 14px", fontSize: "12px", fontWeight: "800", cursor: "pointer", marginTop: "8px"}}>Save notes</button>
+                </>) : null}
+              </div>
+            </>) : null}
+          </div>
           {V.pNeedsScore ? (<>
             <div style={{background: "rgba(245,184,74,.06)", border: "1px solid rgba(245,184,74,.4)", borderRadius: "12px", padding: "14px 20px", marginBottom: "20px", display: "flex", gap: "14px", alignItems: "center", flexWrap: "wrap"}}>
               <span style={{fontSize: "13px", color: "#E9D9B0", lineHeight: "1.55", flex: "1"}}>Sales Decisions answers are in, but the report has not been scored yet.</span>
               <button onClick={V.rescore} style={{background: "#F5B84A", color: "#04120B", border: "none", borderRadius: "9px", padding: "9px 16px", fontSize: "12.5px", fontWeight: "800", cursor: "pointer"}}>Score now</button>
+              {V.pScoreMsg ? (<><span style={{fontSize: "12.5px", color: "#34D399", fontWeight: "700"}}>{V.pScoreMsg}</span></>) : null}
+            </div>
+          </>) : null}
+          {V.rpNeedsEvidence ? (<>
+            <div style={{background: "rgba(245,184,74,.06)", border: "1px solid rgba(245,184,74,.4)", borderRadius: "12px", padding: "14px 20px", marginBottom: "20px", display: "flex", gap: "14px", alignItems: "center", flexWrap: "wrap"}}>
+              <span style={{fontSize: "13px", color: "#E9D9B0", lineHeight: "1.55", flex: "1"}}>This report was scored before answer-level evidence was recorded. Re-score to see which questions and answers sit behind each flag and follow-up.</span>
+              <button onClick={V.rescore} style={{background: "#F5B84A", color: "#04120B", border: "none", borderRadius: "9px", padding: "9px 16px", fontSize: "12.5px", fontWeight: "800", cursor: "pointer"}}>Re-score with evidence</button>
               {V.pScoreMsg ? (<><span style={{fontSize: "12.5px", color: "#34D399", fontWeight: "700"}}>{V.pScoreMsg}</span></>) : null}
             </div>
           </>) : null}
@@ -215,12 +284,25 @@ export function StaffDashboard({ V }: { V: any }) {
                   </>) : null}
                   <div style={{display: "flex", flexDirection: "column", gap: "10px"}}>
                     {(V.rpFlags ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
-                      <div>
+                      <div style={{borderTop: $index ? "1px solid rgba(160,190,170,.08)" : "none", paddingTop: $index ? "10px" : "0"}}>
                         <div style={{display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap"}}>
                           <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "9px", fontWeight: "700", letterSpacing: ".12em", textTransform: "uppercase", color: f?.fg, padding: "3px 7px", borderRadius: "99px", background: f?.bg}}>{f?.sev}</span>
                           <span style={{fontSize: "13px", fontWeight: "700"}}>{f?.label}</span>
+                          <span style={{fontSize: "11px", color: "#5C6B61"}}>{f?.comp}</span>
                         </div>
-                        <div style={{fontSize: "12px", color: "#8FA396", lineHeight: "1.5", marginTop: "4px"}}>{f?.context}</div>
+                        <div style={{fontSize: "12px", color: "#8FA396", lineHeight: "1.5", marginTop: "6px"}}>
+                          <span style={{color: "#5C6B61"}}>Question · </span>{f?.context}
+                        </div>
+                        {f?.chosen ? (<>
+                          <div style={{fontSize: "12px", color: "#F0A070", lineHeight: "1.5", marginTop: "4px"}}>
+                            <span style={{color: "#5C6B61"}}>They chose · </span>{f?.chosen}
+                          </div>
+                        </>) : null}
+                        {f?.better ? (<>
+                          <div style={{fontSize: "12px", color: "#34D399", lineHeight: "1.5", marginTop: "4px"}}>
+                            <span style={{color: "#5C6B61"}}>Strongest option · </span>{f?.better}
+                          </div>
+                        </>) : null}
                       </div>
                     </React.Fragment>))}
                   </div>
@@ -229,9 +311,15 @@ export function StaffDashboard({ V }: { V: any }) {
                   <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#34D399", marginBottom: "10px"}}>{"Positive signals · "}{V.rpPosCount}</div>
                   <div style={{display: "flex", flexDirection: "column", gap: "6px"}}>
                     {(V.rpPositives ?? []).map((s: any, $index: number) => (<React.Fragment key={$index}>
-                      <div style={{fontSize: "12.5px", color: "#D5DED7", lineHeight: "1.5"}}>
-                        {"· "}{s?.label}{" "}
-                        <span style={{color: "#5C6B61"}}>{"— "}{s?.comp}</span>
+                      <div style={{fontSize: "12.5px", color: "#D5DED7", lineHeight: "1.5", borderTop: $index ? "1px solid rgba(160,190,170,.08)" : "none", paddingTop: $index ? "8px" : "0"}}>
+                        <div>
+                          {"· "}<b>{s?.label}</b>{" "}
+                          <span style={{color: "#5C6B61"}}>{"— "}{s?.comp}</span>
+                        </div>
+                        {s?.context ? (<>
+                          <div style={{fontSize: "11.5px", color: "#8FA396", marginTop: "3px", lineHeight: "1.5"}}><span style={{color: "#5C6B61"}}>Question · </span>{s?.context}</div>
+                          <div style={{fontSize: "11.5px", color: "#34D399", marginTop: "2px", lineHeight: "1.5"}}><span style={{color: "#5C6B61"}}>They chose · </span>{s?.chosen}</div>
+                        </>) : null}
                       </div>
                     </React.Fragment>))}
                   </div>
@@ -243,7 +331,15 @@ export function StaffDashboard({ V }: { V: any }) {
                   </>) : null}
                   <div style={{display: "flex", flexDirection: "column", gap: "8px"}}>
                     {(V.rpConsistency ?? []).map((s: any, $index: number) => (<React.Fragment key={$index}>
-                      <div style={{fontSize: "12.5px", color: "#D5DED7", lineHeight: "1.55"}}>{s?.t}</div>
+                      <div>
+                        <div style={{fontSize: "12.5px", color: "#D5DED7", lineHeight: "1.55"}}>{s?.t}</div>
+                        {(s?.evidence ?? []).map((e: any, $i2: number) => (<React.Fragment key={$i2}>
+                          <div style={{fontSize: "11.5px", color: "#8FA396", lineHeight: "1.5", marginTop: "5px", paddingLeft: "10px", borderLeft: "2px solid rgba(160,190,170,.15)"}}>
+                            <span style={{color: "#5C6B61"}}>{e?.kind}{" · "}</span>{e?.q}
+                            <div><span style={{color: "#5C6B61"}}>Answer · </span><span style={{color: e?.color}}>{e?.answer}</span><span style={{color: "#5C6B61"}}>{" · "}{e?.signal}</span></div>
+                          </div>
+                        </React.Fragment>))}
+                      </div>
                     </React.Fragment>))}
                   </div>
                 </div>
@@ -253,9 +349,19 @@ export function StaffDashboard({ V }: { V: any }) {
                   <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "10px"}}>Suggested interview follow-ups</div>
                   <div style={{display: "flex", flexDirection: "column", gap: "10px"}}>
                     {(V.rpFollowUps ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
-                      <div>
+                      <div style={{borderTop: $index ? "1px solid rgba(160,190,170,.08)" : "none", paddingTop: $index ? "10px" : "0"}}>
                         <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", letterSpacing: ".06em", color: "#34D399"}}>{f?.comp}{" · "}{f?.why}</div>
                         <div style={{fontSize: "13px", color: "#D5DED7", lineHeight: "1.55", marginTop: "3px"}}>{f?.q}</div>
+                        {f?.reasons ? (<>
+                          <div style={{fontSize: "11.5px", color: "#8FA396", marginTop: "5px", lineHeight: "1.5"}}><span style={{color: "#5C6B61"}}>Why it’s here · </span>{f?.reasons}</div>
+                        </>) : null}
+                        {(f?.evidence ?? []).map((e: any, $i2: number) => (<React.Fragment key={$i2}>
+                          <div style={{fontSize: "11.5px", color: "#8FA396", lineHeight: "1.5", marginTop: "5px", paddingLeft: "10px", borderLeft: "2px solid rgba(160,190,170,.15)"}}>
+                            <span style={{color: "#5C6B61"}}>{e?.kind}{" · "}</span>{e?.q}
+                            <div><span style={{color: "#5C6B61"}}>Answer · </span><span style={{color: e?.color}}>{e?.answer}</span><span style={{color: "#5C6B61"}}>{" · "}{e?.signal}</span></div>
+                            {e?.best ? (<div><span style={{color: "#5C6B61"}}>Strongest option · </span><span style={{color: "#34D399"}}>{e?.best}</span></div>) : null}
+                          </div>
+                        </React.Fragment>))}
                       </div>
                     </React.Fragment>))}
                   </div>
@@ -272,9 +378,112 @@ export function StaffDashboard({ V }: { V: any }) {
                   </div>
                 </div>
               </div>
+              {V.rpHasEvidence ? (<>
+                <div style={{marginTop: "14px", background: "#0B120E", borderRadius: "12px", padding: "16px 18px"}}>
+                  <div style={{display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap"}}>
+                    <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", flex: "1"}}>The answer trail · every question, their answer, what it scored</div>
+                    <button onClick={V.toggleItems} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{V.rpItemsBtn}</button>
+                  </div>
+                  {V.rpItemsOpen ? (<>
+                    <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: "14px", marginTop: "14px"}}>
+                      {(V.rpItemGroups ?? []).map((g: any, $index: number) => (<React.Fragment key={$index}>
+                        <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.1)", borderRadius: "10px", padding: "14px 16px"}}>
+                          <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "10px", marginBottom: "8px"}}>
+                            <span style={{fontSize: "13.5px", fontWeight: "800"}}>{g?.name}</span>
+                            <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "12px", fontWeight: "700", color: g?.color}}>{g?.scoreTxt}</span>
+                          </div>
+                          <div style={{display: "flex", flexDirection: "column", gap: "8px"}}>
+                            {(g?.items ?? []).map((e: any, $i2: number) => (<React.Fragment key={$i2}>
+                              <div style={{fontSize: "11.5px", lineHeight: "1.5", paddingLeft: "10px", borderLeft: `2px solid ${e?.color}`}}>
+                                <div style={{color: "#A7B5AB"}}><span style={{color: "#5C6B61"}}>{e?.kind}{" · "}</span>{e?.q}</div>
+                                <div><span style={{color: "#5C6B61"}}>Answer · </span><span style={{color: e?.color, fontWeight: "700"}}>{e?.answer}</span><span style={{color: "#5C6B61"}}>{" · "}{e?.signal}{" · "}{e?.score}</span></div>
+                                {e?.best ? (<div><span style={{color: "#5C6B61"}}>Strongest option · </span><span style={{color: "#8FA396"}}>{e?.best}</span></div>) : null}
+                              </div>
+                            </React.Fragment>))}
+                          </div>
+                        </div>
+                      </React.Fragment>))}
+                    </div>
+                  </>) : null}
+                </div>
+              </>) : null}
               <p style={{margin: "16px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.5"}}>{"Signal from the candidate’s own decisions, scored against the "}{V.rpProfName}{" profile’s floors and weights (Weights tab). It sharpens the interview and the combine; it does not make the decision, and the candidate never sees it."}</p>
             </div>
           </>) : null}
+          <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "20px 24px", marginBottom: "20px"}}>
+            <div style={{display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "6px"}}>
+              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", flex: "1"}}>{"Transcripts · "}{(V.pTranscripts ?? []).length}</div>
+              {V.trEnabled ? (<>
+                <button onClick={V.toggleTr} style={{background: V.trOpen ? "transparent" : "#10B981", color: V.trOpen ? "#8FA396" : "#04120B", border: V.trOpen ? "1px solid rgba(160,190,170,.25)" : "none", borderRadius: "8px", padding: "8px 14px", fontSize: "12px", fontWeight: "800", cursor: "pointer"}}>{V.trOpen ? 'Cancel' : 'Submit a transcript for evaluation'}</button>
+              </>) : null}
+            </div>
+            <p style={{margin: "0 0 12px", fontSize: "12px", color: "#5C6B61", lineHeight: "1.5"}}>Paste or upload the transcript of a mock pitch, phone screen, or interview. It is stored for the assigned evaluators to read; when the AI-assisted read is switched on, an advisory summary with verbatim quotes appears alongside. Evaluators score; nothing here decides.</p>
+            {V.trOpen ? (<>
+              <div style={{background: "#0B120E", borderRadius: "12px", padding: "16px 18px", marginBottom: "14px"}}>
+                <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "10px"}}>
+                  <select value={(V.trKind) ?? ''} onChange={V.setTrKind} style={INPUT}>
+                    {(V.trKinds ?? []).map((k: any, $index: number) => (<React.Fragment key={$index}>
+                      <option value={k?.id}>{k?.label}</option>
+                    </React.Fragment>))}
+                  </select>
+                  <input value={(V.trTitle) ?? ''} onChange={V.setTrTitle} placeholder="Title (e.g. Mock pitch · Sep 12 · with G. Allen)" style={INPUT} />
+                  <label style={{...INPUT, display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", color: V.trFileName ? "#34D399" : "#8FA396"}}>
+                    <input type="file" accept=".txt,.vtt,.srt,.md,.text" onChange={V.pickTrFile} style={{display: "none"}} />
+                    <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>{V.trFileName || 'Upload .txt / .vtt / .srt'}</span>
+                  </label>
+                </div>
+                <textarea value={(V.trTxt) ?? ''} onChange={V.setTrTxt} rows={8} placeholder="Paste the transcript here (Zoom, Meet, Teams, Otter…). Timestamps are fine — they are stripped." style={{...INPUT, marginTop: "10px", resize: "vertical", lineHeight: "1.5", fontFamily: "inherit"}} />
+                <div style={{display: "flex", gap: "10px", alignItems: "center", marginTop: "10px", flexWrap: "wrap"}}>
+                  <button onClick={V.submitTr} disabled={!V.trOk} style={{background: V.trBtnBg, color: "#04120B", border: "none", borderRadius: "9px", padding: "10px 16px", fontSize: "12.5px", fontWeight: "800", cursor: "pointer"}}>{V.trBusy ? 'Reviewing…' : 'Submit for evaluation'}</button>
+                  <span style={{fontSize: "11.5px", color: "#5C6B61"}}>{V.trCount}</span>
+                </div>
+              </div>
+            </>) : null}
+            {V.trMsg ? (<><div style={{fontSize: "12.5px", color: V.trMsgColor, fontWeight: "700", marginBottom: "10px", lineHeight: "1.5"}}>{V.trMsg}</div></>) : null}
+            <div style={{display: "flex", flexDirection: "column", gap: "12px"}}>
+              {(V.pTranscripts ?? []).map((t: any, $index: number) => (<React.Fragment key={$index}>
+                <div style={{background: "#0B120E", borderRadius: "12px", padding: "16px 18px"}}>
+                  <div style={{display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap"}}>
+                    <div style={{flex: "1"}}>
+                      <div style={{fontSize: "14px", fontWeight: "800"}}>{t?.title}</div>
+                      <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "2px"}}>{t?.kind}{" · "}{t?.meta}</div>
+                    </div>
+                    <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".06em", textTransform: "uppercase", color: t?.statusColor}}>{t?.statusTxt}</span>
+                    <button onClick={t?.toggle} style={{background: "transparent", color: "#A7B5AB", border: "1px solid rgba(160,190,170,.2)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{t?.toggleTxt}</button>
+                  </div>
+                  {t?.hasReview ? (<>
+                    <p style={{margin: "12px 0 10px", fontSize: "13px", color: "#D5DED7", lineHeight: "1.6"}}>{t?.summary}</p>
+                    <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "10px"}}>
+                      {(t?.comps ?? []).map((c: any, $i2: number) => (<React.Fragment key={$i2}>
+                        <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.1)", borderRadius: "10px", padding: "10px 12px"}}>
+                          <div style={{display: "flex", justifyContent: "space-between", gap: "8px", fontSize: "12.5px"}}>
+                            <span style={{fontWeight: "700"}}>{c?.name}</span>
+                            <span style={{fontFamily: "'JetBrains Mono',monospace", fontWeight: "700", color: c?.color}}>{c?.rating}</span>
+                          </div>
+                          {(c?.quotes ?? []).map((q: any, $i3: number) => (<React.Fragment key={$i3}>
+                            <div style={{fontSize: "11.5px", color: "#A7B5AB", lineHeight: "1.5", marginTop: "6px", paddingLeft: "9px", borderLeft: "2px solid rgba(160,190,170,.2)"}}>
+                              <span style={{fontStyle: "italic"}}>{"“"}{q?.quote}{"”"}</span>
+                              {q?.note ? (<span style={{color: "#5C6B61"}}>{" — "}{q?.note}</span>) : null}
+                            </div>
+                          </React.Fragment>))}
+                          {c?.note ? (<div style={{fontSize: "11px", color: "#5C6B61", marginTop: "6px", lineHeight: "1.45"}}>{c?.note}</div>) : null}
+                        </div>
+                      </React.Fragment>))}
+                    </div>
+                    <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "12px", marginTop: "12px", fontSize: "12.5px", lineHeight: "1.55"}}>
+                      <div><div style={{...MONO_LABEL, color: "#34D399", marginBottom: "4px"}}>Strengths</div>{(t?.strengths ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#D5DED7"}}>{"· "}{s}</div>))}</div>
+                      <div><div style={{...MONO_LABEL, color: "#F87171", marginBottom: "4px"}}>Concerns</div>{(t?.concerns ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#D5DED7"}}>{"· "}{s}</div>))}</div>
+                      <div><div style={{...MONO_LABEL, color: "#F5B84A", marginBottom: "4px"}}>Follow-ups this raises</div>{(t?.followUps ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#D5DED7"}}>{"· "}{s}</div>))}</div>
+                    </div>
+                    {t?.caution ? (<p style={{margin: "10px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.5"}}>{t?.caution}</p>) : null}
+                  </>) : null}
+                  {t?.show ? (<>
+                    <pre style={{margin: "12px 0 0", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "12.5px", lineHeight: "1.6", color: "#A7B5AB", maxHeight: "360px", overflow: "auto", background: "#0F1611", border: "1px solid rgba(160,190,170,.1)", borderRadius: "10px", padding: "14px 16px"}}>{t?.txt}</pre>
+                  </>) : null}
+                </div>
+              </React.Fragment>))}
+            </div>
+          </div>
           {V.pHasData ? (<>
             <div style={{display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "20px", alignItems: "start"}}>
               <div style={{display: "flex", flexDirection: "column", gap: "16px"}}>
@@ -819,12 +1028,12 @@ export function StaffDashboard({ V }: { V: any }) {
       {V.vSchedule ? (<>
         <div style={{animation: "fadeUp .35s ease both"}}>
           <h1 style={{margin: "0 0 6px", fontSize: "30px", fontWeight: "900", letterSpacing: "-.015em"}}>Schedule a combine</h1>
-          <p style={{margin: "0 0 22px", fontSize: "13px", color: "#8FA396", maxWidth: "760px", lineHeight: "1.6"}}>One session: one candidate, two evaluators, one locked exercise version. Invites go to the candidate’s portal and both evaluators’ calendars; the join link is generated per session.</p>
-          <div style={{display: "grid", gridTemplateColumns: "480px 1fr", gap: "20px", alignItems: "start"}}>
+          <p style={{margin: "0 0 22px", fontSize: "13px", color: "#8FA396", maxWidth: "760px", lineHeight: "1.6"}}>One session: one candidate, two evaluators. The candidate gets an email with their own combine link (separate from the assessment link) and a calendar file; when Google Calendar is connected, everyone receives a calendar invitation and a Google Meet link is created for you.</p>
+          <div style={{display: "grid", gridTemplateColumns: "minmax(0,480px) minmax(0,1fr)", gap: "20px", alignItems: "start"}}>
             <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "24px"}}>
               <div style={{display: "flex", flexDirection: "column", gap: "14px"}}>
                 <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
-                  <span>Candidate · SJT complete, no session yet</span>
+                  <span>{"Candidate · "}{V.schReadyCount}{" ready · "}{V.schOtherCount}{" still in the assessment"}</span>
                   <select value={(V.schCand) ?? ''} onChange={V.setSchCand} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#E9F0EA", fontSize: "13px"}}>
                     {(V.schCandOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
                       <option value={o?.id}>{o?.label}</option>
@@ -834,13 +1043,34 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px"}}>
                   <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
                     <span>Date</span>
-                    <input value={(V.schDate) ?? ''} onChange={V.setSchDate} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#E9F0EA", fontSize: "13px"}} />
+                    <input type="date" value={(V.schDate) ?? ''} onChange={V.setSchDate} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#E9F0EA", fontSize: "13px", colorScheme: "dark"} as any} />
                   </label>
                   <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
-                    <span>Time (CT) · 60 min</span>
-                    <input value={(V.schTime) ?? ''} onChange={V.setSchTime} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#E9F0EA", fontSize: "13px"}} />
+                    <span>Start time</span>
+                    <input type="time" value={(V.schTime) ?? ''} onChange={V.setSchTime} style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#E9F0EA", fontSize: "13px", colorScheme: "dark"} as any} />
                   </label>
                 </div>
+                <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px"}}>
+                  <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
+                    <span>Time zone</span>
+                    <select value={(V.schTz) ?? ''} onChange={V.setSchTz} style={INPUT}>
+                      {(V.tzOptions ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
+                        <option value={o?.id}>{o?.label}</option>
+                      </React.Fragment>))}
+                    </select>
+                  </label>
+                  <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
+                    <span>Length</span>
+                    <select value={(V.schDur) ?? ''} onChange={V.setSchDur} style={INPUT}>
+                      {(V.durOptions ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
+                        <option value={o?.id}>{o?.label}</option>
+                      </React.Fragment>))}
+                    </select>
+                  </label>
+                </div>
+                {V.schWhenPreview ? (<>
+                  <div style={{fontSize: "13px", color: "#34D399", fontWeight: "700"}}>{V.schWhenPreview}</div>
+                </>) : null}
                 <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px"}}>
                   <label style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
                     <span>Evaluator 1 · plays the buyer</span>
@@ -865,17 +1095,23 @@ export function StaffDashboard({ V }: { V: any }) {
                     <div style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#A7B5AB", fontSize: "13px"}}>v1.2 · locked for Cohort 2026-B</div>
                   </div>
                   <div style={{display: "flex", flexDirection: "column", gap: "6px", fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#7E9186"}}>
-                    <span>Join link</span>
+                    <span>Join link · optional</span>
                     {V.schLinkEditable ? (<>
-                      <input value={(V.schLinkVal) ?? ''} onChange={V.setSchLink} placeholder="https://zoom.us/j/…" style={INPUT} />
+                      <input value={(V.schLinkVal) ?? ''} onChange={V.setSchLink} placeholder="Leave blank for a Google Meet link" style={INPUT} />
                     </>) : (<>
                       <div style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px 12px", color: "#34D399", fontSize: "13px", wordBreak: "break-all"}}>{V.schLink}</div>
                     </>)}
                   </div>
                 </div>
                 <div style={{fontSize: "12px", color: V.schWarnColor, minHeight: "16px", lineHeight: "1.5"}}>{V.schWarn}</div>
-                <button onClick={V.sendSchedule} disabled={!!(V.schBlocked)} style={{background: V.schBtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "13px 24px", fontSize: "14px", fontWeight: "800", cursor: "pointer"}}>Send invites</button>
-                <p style={{margin: "0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.5"}}>The candidate sees date, link, and what to expect. Evaluators get a calendar hold, the candidate brief, the case submission, and a conflict-of-interest prompt. Neither evaluator sees the other’s scores before submitting.</p>
+                <button onClick={V.sendSchedule} disabled={!!(V.schBlocked)} style={{background: V.schBtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "13px 24px", fontSize: "14px", fontWeight: "800", cursor: "pointer"}}>{V.schBusy ? 'Sending…' : 'Save & send invites'}</button>
+                {V.schMsg ? (<>
+                  <div style={{fontSize: "12.5px", color: "#34D399", fontWeight: "700", lineHeight: "1.55", wordBreak: "break-word"}}>{V.schMsg}</div>
+                </>) : null}
+                {(V.schWarnings ?? []).map((w: any, $index: number) => (<React.Fragment key={$index}>
+                  <div style={{fontSize: "12px", color: "#F5B84A", lineHeight: "1.5", wordBreak: "break-word"}}>{"⚠ "}{w}</div>
+                </React.Fragment>))}
+                <p style={{margin: "0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.5"}}>The candidate gets the date, the join link, and their combine page (Exercise B, recording notice). Evaluators get the session, the brief, and a conflict-of-interest prompt in the cockpit. Neither evaluator sees the other’s scores before submitting.</p>
               </div>
             </div>
             <div style={{display: "flex", flexDirection: "column", gap: "12px"}}>
@@ -886,8 +1122,11 @@ export function StaffDashboard({ V }: { V: any }) {
                     <div style={{fontSize: "15px", fontWeight: "800", flex: "1"}}>{s?.cand}</div>
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".1em", textTransform: "uppercase", color: "#34D399"}}>{s?.status}</span>
                   </div>
-                  <div style={{fontSize: "12.5px", color: "#8FA396", marginTop: "4px"}}>{s?.when}{" · "}{s?.evals}{" · "}{s?.ver}</div>
-                  <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#34D399", marginTop: "6px"}}>{s?.link}</div>
+                  <div style={{fontSize: "12.5px", color: "#8FA396", marginTop: "4px"}}>{s?.when}{" · "}{s?.evals}{s?.calendar ? " · " + s.calendar : ""}</div>
+                  <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#34D399", marginTop: "6px", wordBreak: "break-all"}}>{s?.link}</div>
+                  {s?.combineLink ? (<>
+                    <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", color: "#7E9186", marginTop: "4px", wordBreak: "break-all"}}>{"Candidate combine page · "}{s?.combineLink}</div>
+                  </>) : null}
                 </div>
               </React.Fragment>))}
             </div>
