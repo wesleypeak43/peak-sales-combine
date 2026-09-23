@@ -31,6 +31,7 @@ Copy `.env.example` to `.env` and fill in the keys to run live mode locally. The
 
 ## Data model (live mode)
 
+
 `staff` (roles: admin, manager, evaluator, leadership) · `jobs` (role + school pipelines with share/apply tokens) · `candidates` (token, expiry, track = assessment | info, source = invite | manual | self, job_id, ta_stage, reminder timestamps, contact columns, résumé path, `progress` JSON, `report` JSON) · `reviews` · `sessions` (own `token` for the combine link, `starts_at`, calendar event id) · `evaluations` · `interviews` · `decisions` · `accommodations` (+ `accommodation_details`, visible to managers only) · `transcripts` (+ screener notes, grade) · `settings` (weights, thresholds, retention, schools, taStages, callEvalPrompt, bankEdits) · `outcomes` · `audit` · storage bucket `candidate-files`.
 
 Candidates never authenticate: the assessment link carries the candidate token (`candidate_open` / `candidate_save`), the combine link carries the session token (`combine_open` / `combine_save`), the public board and application pages carry the job's tokens (`board_open` / `apply_open`); all are `security definer` functions that validate it. Staff use Supabase Auth; every table has row-level-security policies keyed on the signed-in email's staff record.
