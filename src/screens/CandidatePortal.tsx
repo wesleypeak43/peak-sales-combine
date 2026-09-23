@@ -153,6 +153,18 @@ export function CandidatePortal({ V }: { V: any }) {
                 <div style={{...INPUT, color: "#A7B5AB"}}>{V.appRole}</div>
               </div>
               <div>
+                <div style={FIELD}>School / property you’re applying to</div>
+                {V.schoolIsSelect ? (<>
+                  <select value={(V.appProgram) ?? ''} onChange={V.setAppProgram} style={INPUT}>
+                    {(V.schoolOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
+                      <option value={o?.id}>{o?.label}</option>
+                    </React.Fragment>))}
+                  </select>
+                </>) : (<>
+                  <input value={(V.appProgram) ?? ''} onChange={V.setAppProgram} placeholder="e.g. Texas Tech Athletics" style={INPUT} />
+                </>)}
+              </div>
+              <div>
                 <div style={FIELD}>Are you legally authorized to work in the United States for this role?</div>
                 <div style={{display: "flex", gap: "8px"}}>
                   <button onClick={V.authYes} style={{flex: "1", background: V.authYesBg, color: V.authYesFg, border: "1px solid rgba(160,190,170,.2)", borderRadius: "10px", padding: "11px", fontSize: "13.5px", fontWeight: "600", cursor: "pointer"}}>Yes</button>
@@ -216,26 +228,34 @@ export function CandidatePortal({ V }: { V: any }) {
             </div>
             <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "12px", color: "#8FA396"}}>~15 min</div>
           </div>
-          {V.bkHasText ? (<>
+          {V.bkIntro ? (<>
+            <div style={{...CARD, border: "1px solid rgba(16,185,129,.35)", padding: "28px"}}>
+              <div style={KICKER}>{"Next up · "}{V.bkIntroTitle}{" · "}{V.bkIntroCount}</div>
+              <div style={{fontSize: "22px", fontWeight: "800", marginBottom: "10px"}}>{V.bkIntroKicker}</div>
+              <p style={{margin: "0 0 20px", fontSize: "14px", lineHeight: "1.65", color: "#A7B5AB"}}>{V.bkIntroBody}</p>
+              <button onClick={V.bkIntroGo} style={PRIMARY}>Begin</button>
+            </div>
+          </>) : null}
+          {!V.bkIntro && V.bkHasText ? (<>
             <div style={{...CARD, padding: "24px 26px", marginBottom: "14px"}}>
               <p style={{margin: "0", fontSize: "clamp(16px,4.5cqw,19px)", lineHeight: "1.5", color: "#E9F0EA", fontWeight: "600"}}>{V.bkText}</p>
             </div>
           </>) : null}
-          {V.bkIsLikert ? (<>
+          {!V.bkIntro && V.bkIsLikert ? (<>
             <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px"}}>
               {(V.bkScale ?? []).map((b: any, $index: number) => (<React.Fragment key={$index}>
                 <button onClick={b?.on} style={{background: b?.bg, border: `1px solid ${b?.border}`, borderRadius: "10px", padding: "16px 8px", color: b?.fg, fontSize: "12.5px", fontWeight: "700", cursor: "pointer", lineHeight: "1.3", minHeight: "56px"}} className="ps3">{b?.label}</button>
               </React.Fragment>))}
             </div>
           </>) : null}
-          {V.bkIsPair ? (<>
+          {!V.bkIntro && V.bkIsPair ? (<>
             <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "12px"}}>
               {(V.bkPair ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
                 <button onClick={o?.on} style={{background: o?.bg, border: `1px solid ${o?.border}`, borderRadius: "14px", padding: "26px 22px", color: o?.fg, fontSize: "16px", fontWeight: "700", lineHeight: "1.45", textAlign: "left", cursor: "pointer", minHeight: "110px"}} className="ps1">{o?.text}</button>
               </React.Fragment>))}
             </div>
           </>) : null}
-          {V.bkIsChoice ? (<>
+          {!V.bkIntro && V.bkIsChoice ? (<>
             <div style={{display: "flex", flexDirection: "column", gap: "10px"}}>
               {(V.bkOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
                 <button onClick={o?.on} style={{display: "flex", gap: "14px", alignItems: "center", background: o?.bg, border: `1px solid ${o?.border}`, borderRadius: "12px", padding: "16px 18px", color: o?.fg, fontSize: "14px", lineHeight: "1.5", textAlign: "left", cursor: "pointer", minHeight: "52px"}} className="ps1">

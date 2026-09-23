@@ -4,6 +4,8 @@
 // Peak Sports Management — sales candidate assessment bank + scoring engine.
 // Option score scale: 100 elite · 78 strong · 50 neutral · 28 mild concern · 6 red flag.
 
+import { RATIONALE, SCALE_NOTE } from './rationale';
+
 const E = 100, S = 78, N = 50, M = 28, R = 6;
 
 export const SIGNAL = s =>
@@ -519,29 +521,64 @@ export const LIKERT_LABELS = ["Strongly disagree", "Disagree", "Neutral", "Agree
 
 // Every answered item with the text the candidate saw, the option they chose, and what it scored —
 // this is the evidence trail behind every flag, positive, and follow-up in the report.
+// Why an item scores the way it does: the authored rationale, or the generic rule for self-ratings.
+export function whyFor(role, q) {
+  if (q.why) return q.why;
+  if (RATIONALE[q.id]) return RATIONALE[q.id];
+  const comp = (role.competencies[q.comp] || {}).name || q.comp;
+  if (q.kind === "likert") return q.reverse
+    ? "Reverse-scored self-rating: agreeing with this statement is the concern for " + comp + ", so \u201cStrongly disagree\u201d scores 100 and \u201cStrongly agree\u201d scores 0."
+    : "Self-rating. Agreement counts toward " + comp + " \u2014 \u201cStrongly agree\u201d scores 100, \u201cStrongly disagree\u201d 0. Self-ratings are checked against the scenario choices for the same competency; large gaps show up in the consistency notes.";
+  return "";
+}
+
+// Scoring edits made in the Question bank (settings.bankEdits[profileId][itemId]) applied to a role, without touching the source bank.
+// edit shape: { text?, why?, opts?: [{ text?, score?, flag?, positive? }] } — only scenarios and worst-move items are editable.
+export function applyEdits(role, edits) {
+  if (!edits || Array.isArray(edits) || typeof edits !== "object") return role;
+  const patch = q => {
+    const e = edits[q.id]; if (!e) return q;
+    const opts = (q.opts || []).map((o, i) => {
+      const eo = (e.opts || [])[i] || {};
+      const num = Number(eo.score);
+      const score = eo.score !== undefined && eo.score !== null && eo.score !== "" && !isNaN(num) ? Math.max(0, Math.min(100, Math.round(num))) : o.score;
+      return { ...o, text: eo.text ? eo.text : o.text, score, flag: eo.flag !== undefined ? (eo.flag || null) : o.flag, positive: eo.positive !== undefined ? (eo.positive || null) : o.positive };
+    });
+    return { ...q, text: e.text || q.text, why: e.why || q.why, opts, edited: true };
+  };
+  return { ...role, scenarios: role.scenarios.map(patch), worst: role.worst.map(patch) };
+}
+
+// Every answered item with the text the candidate saw, the option they chose, what it scored, the full rubric
+// for that question, and the reasoning — this is the evidence trail behind every flag, positive, and follow-up.
 export function itemEvidence(role, answers) {
   const out = [];
+  const opt = (text, score, extra) => ({ text, score, signal: SIGNAL(score), ...(extra || {}) });
   role.likert.forEach(q => {
     const v = answers[q.id]; if (v == null) return;
     const pts = (q.reverse ? 6 - v : v - 1) * 25;
-    out.push({ id: q.id, kind: "likert", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: LIKERT_LABELS[v - 1] || String(v), score: pts, signal: SIGNAL(pts), note: q.reverse ? "Reverse-scored: agreeing is the concern." : "" });
+    const options = LIKERT_LABELS.map((l, i) => opt(l, (q.reverse ? 4 - i : i) * 25, { chosen: v === i + 1 }));
+    out.push({ id: q.id, kind: "likert", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: LIKERT_LABELS[v - 1] || String(v), score: pts, signal: SIGNAL(pts), note: q.reverse ? "Reverse-scored: agreeing is the concern." : "", why: whyFor(role, q), options });
   });
   role.pairs.forEach(q => {
     const pick = answers[q.id]; if (!pick) return;
     const side = pick === "a" ? q.a : q.b, other = pick === "a" ? q.b : q.a;
-    out.push({ id: q.id, kind: "pair", comp: side[0], compName: role.competencies[side[0]].name, q: "Both are good. Which is more you?", answer: side[2], score: side[1], signal: SIGNAL(side[1]), other: other[2], best: (q.a[1] >= q.b[1] ? q.a : q.b)[2] });
+    const options = [q.a, q.b].map((s, i) => opt(s[2], s[1], { chosen: pick === (i === 0 ? "a" : "b"), comp: (role.competencies[s[0]] || {}).name || s[0] }));
+    out.push({ id: q.id, kind: "pair", comp: side[0], compName: role.competencies[side[0]].name, q: "Both are good. Which is more you?", answer: side[2], score: side[1], signal: SIGNAL(side[1]), other: other[2], best: (q.a[1] >= q.b[1] ? q.a : q.b)[2], why: whyFor(role, q), options });
   });
   role.scenarios.forEach(q => {
     const pick = answers[q.id]; if (pick == null) return;
-    const opt = q.opts[pick]; if (!opt) return;
+    const o = q.opts[pick]; if (!o) return;
     const best = q.opts.slice().sort((x, y) => y.score - x.score)[0];
-    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: opt.text, score: opt.score, signal: SIGNAL(opt.score), best: best.i === opt.i ? "" : best.text, flag: opt.flag || "", positive: opt.positive || "" });
+    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, flag: x.flag || "", positive: x.positive || "" }));
+    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: o.text, score: o.score, signal: SIGNAL(o.score), best: best.i === o.i ? "" : best.text, flag: o.flag || "", positive: o.positive || "", why: whyFor(role, q), options, edited: !!q.edited });
   });
   role.worst.forEach(q => {
     const pick = answers[q.id]; if (pick == null) return;
-    const opt = q.opts[pick]; if (!opt) return;
+    const o = q.opts[pick]; if (!o) return;
     const worst = q.opts.slice().sort((x, y) => y.bad - x.bad)[0];
-    out.push({ id: q.id, kind: "worst", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: opt.text, score: opt.score, signal: SIGNAL(opt.score), best: worst.i === opt.i ? "" : worst.text, flag: opt.bad === 0 ? "Misread which action carries the most risk" : "" });
+    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, flag: x.bad === 0 ? "the correct action" : "" }));
+    out.push({ id: q.id, kind: "worst", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: o.text, score: o.score, signal: SIGNAL(o.score), best: worst.i === o.i ? "" : worst.text, flag: o.bad === 0 ? "Misread which action carries the most risk" : "", why: whyFor(role, q), options, edited: !!q.edited });
   });
   return out;
 }
@@ -581,9 +618,9 @@ export function score(role, answers, settings) {
     if (opt.flag) redFlags.push({
       comp: q.comp, label: opt.flag, qid: q.id,
       severity: opt.score <= 10 ? "critical" : opt.score <= 30 ? "meaningful" : "minor",
-      context: q.text, chosen: opt.text, better: ev.best || "", score: opt.score,
+      context: q.text, chosen: opt.text, better: ev.best || "", score: opt.score, why: ev.why || "",
     });
-    if (opt.positive) positives.push({ comp: q.comp, label: opt.positive, qid: q.id, context: q.text, chosen: opt.text });
+    if (opt.positive) positives.push({ comp: q.comp, label: opt.positive, qid: q.id, context: q.text, chosen: opt.text, why: ev.why || "" });
   });
 
   // Worst-move items count toward their competency like any other item; a candidate who picks the
@@ -598,7 +635,7 @@ export function score(role, answers, settings) {
     const ev = byId[q.id] || {};
     if (opt.bad === 0) redFlags.push({
       comp: q.comp, label: "Misread which action carries the most risk", qid: q.id,
-      severity: "meaningful", context: q.text, chosen: opt.text, better: ev.best || "", score: opt.score,
+      severity: "meaningful", context: q.text, chosen: opt.text, better: ev.best || "", score: opt.score, why: ev.why || "",
     });
   });
 
@@ -619,7 +656,7 @@ export function score(role, answers, settings) {
   const overall = Math.round(active.reduce((a, c) => a + c.score * c.weight, 0) / wsum);
 
   // Evidence helpers: the weakest answers behind a competency, and the self-ratings vs. scenario choices behind a consistency note.
-  const brief = it => ({ id: it.id, kind: it.kind, q: it.q, answer: it.answer, score: it.score, signal: it.signal, best: it.best || "" });
+  const brief = it => ({ id: it.id, kind: it.kind, q: it.q, answer: it.answer, score: it.score, signal: it.signal, best: it.best || "", why: it.why || "" });
   const weakest = (comp, n) => items.filter(it => it.comp === comp).sort((a, b) => a.score - b.score).slice(0, n).map(brief);
 
   // Response-consistency checks — never phrased as an accusation.
@@ -735,4 +772,4 @@ export function demoAnswers(role, profile) {
   return out;
 }
 
-export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, LIKERT_LABELS, defaultSettings, shuffled, scoredItems, flowFor, itemEvidence, score, demoAnswers };
+export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, LIKERT_LABELS, RATIONALE, SCALE_NOTE, defaultSettings, shuffled, scoredItems, flowFor, itemEvidence, whyFor, applyEdits, score, demoAnswers };

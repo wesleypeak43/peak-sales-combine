@@ -175,6 +175,36 @@ update public.candidates set role = 'Entry Level Sales Professional' where role 
 update public.candidates set role = 'Director of Sales' where role in ('Partnership Development Manager', 'Regional Sales Director');
 update public.candidates set role = 'Director of Service' where role in ('Account Manager');
 
+-- ---------- v3.2 additions (safe on an existing database) ----------
+-- Jobs: one hiring pipeline per role + school/property, with an external read-only board link and a public application link.
+create table if not exists public.jobs (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,                       -- one of the three role profiles
+  program text not null default '',          -- school / property, e.g. "Texas Tech Athletics"
+  status text not null default 'Open',       -- Open | Paused | Filled | Closed
+  share_token text unique not null default encode(gen_random_bytes(18), 'hex'),
+  apply_token text unique not null default encode(gen_random_bytes(18), 'hex'),
+  share_enabled boolean not null default true,
+  apply_enabled boolean not null default true,
+  created_by uuid references public.staff(id),
+  created_at timestamptz not null default now()
+);
+alter table public.candidates
+  add column if not exists job_id uuid references public.jobs(id) on delete set null,
+  add column if not exists ta_stage text not null default '',       -- pipeline stage set by staff ('' = derived from progress)
+  add column if not exists stage_changed_at timestamptz,
+  add column if not exists reminder1_at timestamptz,               -- 48-hour reminder sent
+  add column if not exists reminder2_at timestamptz;               -- 72-hour reminder sent
+alter table public.transcripts
+  add column if not exists notes text not null default '',         -- the screener's own read, folded into the summary
+  add column if not exists grade text;                             -- A+ … F (first-call evaluations)
+-- One job per role + school already in the pipeline; existing candidates are attached to theirs.
+insert into public.jobs (title, program)
+  select distinct c.role, coalesce(c.program, '') from public.candidates c
+  where not exists (select 1 from public.jobs j where j.title = c.role and j.program = coalesce(c.program, ''));
+update public.candidates c set job_id = j.id from public.jobs j
+  where c.job_id is null and j.title = c.role and j.program = coalesce(c.program, '');
+
 -- ---------- who is asking? ----------
 create or replace function public.current_staff_id() returns uuid
 language sql stable security definer set search_path = public as $$
@@ -247,6 +277,7 @@ alter table public.settings enable row level security;
 alter table public.outcomes enable row level security;
 alter table public.audit enable row level security;
 alter table public.transcripts enable row level security;
+alter table public.jobs enable row level security;
 
 drop policy if exists staff_select on public.staff;
 drop policy if exists staff_admin_all on public.staff;
@@ -324,6 +355,17 @@ create policy audit_insert on public.audit for insert to authenticated with chec
 drop policy if exists tr_select on public.transcripts;
 create policy tr_select on public.transcripts for select to authenticated using (public.is_pipeline_staff() or public.assigned_to_me(candidate_id));
 
+drop policy if exists jobs_select on public.jobs;
+drop policy if exists jobs_write on public.jobs;
+create policy jobs_select on public.jobs for select to authenticated using (public.is_staff());
+create policy jobs_write on public.jobs for all to authenticated using (public.can_manage()) with check (public.can_manage());
+
+-- Hiring managers may edit the operational settings (evaluation instructions, school list, pipeline stages); everything else stays admin/leadership.
+drop policy if exists set_write_mgr on public.settings;
+create policy set_write_mgr on public.settings for all to authenticated
+  using (public.can_manage() and key in ('callEvalPrompt', 'schools', 'taStages'))
+  with check (public.can_manage() and key in ('callEvalPrompt', 'schools', 'taStages'));
+
 -- ---------- files (résumés, Exercise B uploads) ----------
 -- Private bucket. Candidates upload through short-lived signed URLs issued by /api/upload; staff read through signed download links.
 insert into storage.buckets (id, name, public, file_size_limit)
@@ -375,7 +417,9 @@ begin
     'accommodation', case when a.id is null then null else jsonb_build_object('status', a.status, 'resolution', a.resolution) end,
     'decision', case when d.id is null then null else d.decision end,
     'review', case when r.id is null then null else r.outcome end,
-    'evaluations', n_evals
+    'evaluations', n_evals,
+    'schools', coalesce((select value from public.settings where key = 'schools'), '[]'::jsonb),
+    'bank_edits', (select value from public.settings where key = 'bankEdits')
   );
 end $$;
 
@@ -397,7 +441,8 @@ begin
       phone = coalesce(nullif(trim(p_patch -> 'app' ->> 'phone'), ''), phone),
       loc = coalesce(nullif(trim(p_patch -> 'app' ->> 'loc'), ''), loc),
       school = coalesce(nullif(trim(p_patch -> 'app' ->> 'school'), ''), school),
-      linkedin = coalesce(nullif(trim(p_patch -> 'app' ->> 'linkedin'), ''), linkedin)
+      linkedin = coalesce(nullif(trim(p_patch -> 'app' ->> 'linkedin'), ''), linkedin),
+      program = coalesce(nullif(trim(p_patch -> 'app' ->> 'program'), ''), program)
     where id = c.id;
   end if;
   if coalesce((p_patch ->> 'accomSent')::boolean, false)
@@ -468,6 +513,55 @@ end $$;
 grant execute on function public.combine_open(text) to anon, authenticated;
 grant execute on function public.combine_save(text, jsonb) to anon, authenticated;
 
+-- ---------- external pipeline board (read-only, by the job's share link; no login) ----------
+create or replace function public.board_open(p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  j public.jobs;
+  stages jsonb;
+begin
+  select * into j from public.jobs where share_token = p_token and share_enabled;
+  if not found then
+    return jsonb_build_object('status', 'invalid');
+  end if;
+  select value into stages from public.settings where key = 'taStages';
+  return jsonb_build_object(
+    'status', 'ok',
+    'job', jsonb_build_object('id', j.id, 'title', j.title, 'program', j.program, 'status', j.status),
+    'stages', coalesce(stages, '[]'::jsonb),
+    'candidates', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'name', c.name, 'loc', c.loc, 'stage', c.ta_stage, 'stage_changed_at', c.stage_changed_at, 'created_at', c.created_at,
+        'assessment_done', coalesce((c.progress -> 'done' ->> 's3')::boolean, false),
+        'first_call', exists (select 1 from public.transcripts t where t.candidate_id = c.id and t.kind like 'First call%'),
+        'combine', exists (select 1 from public.sessions s where s.candidate_id = c.id),
+        'evaluated', exists (select 1 from public.evaluations e where e.candidate_id = c.id),
+        'decision', (select d.decision from public.decisions d where d.candidate_id = c.id order by d.created_at desc limit 1),
+        'withdrawn', coalesce((c.progress ->> 'withdrawn')::boolean, false)
+      ) order by c.created_at)
+      from public.candidates c where c.job_id = j.id and not c.archived), '[]'::jsonb)
+  );
+end $$;
+
+-- Public application page (by the job's apply link). Submissions go through /api/apply.
+create or replace function public.apply_open(p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  j public.jobs;
+begin
+  select * into j from public.jobs where apply_token = p_token;
+  if not found then
+    return jsonb_build_object('status', 'invalid');
+  end if;
+  if not j.apply_enabled or j.status not in ('Open') then
+    return jsonb_build_object('status', 'closed', 'job', jsonb_build_object('title', j.title, 'program', j.program));
+  end if;
+  return jsonb_build_object('status', 'ok', 'job', jsonb_build_object('title', j.title, 'program', j.program));
+end $$;
+
+grant execute on function public.board_open(text) to anon, authenticated;
+grant execute on function public.apply_open(text) to anon, authenticated;
+
 -- ---------- bookkeeping triggers ----------
 create or replace function public.handle_auth_signin() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -526,7 +620,7 @@ create trigger audit_transcripts after insert on public.transcripts for each row
 do $$
 declare t text;
 begin
-  foreach t in array array['candidates','reviews','sessions','evaluations','interviews','decisions','accommodations','settings','staff','outcomes','audit','transcripts']
+  foreach t in array array['candidates','reviews','sessions','evaluations','interviews','decisions','accommodations','settings','staff','outcomes','audit','transcripts','jobs']
   loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);

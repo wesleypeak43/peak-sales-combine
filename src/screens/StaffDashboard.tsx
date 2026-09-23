@@ -6,6 +6,13 @@ const INPUT = {width: "100%", boxSizing: "border-box", background: "#0B120E", bo
 const MONO_LABEL = {fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "#7E9186"} as any;
 
 
+const SCARD = {background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px"} as any;
+const SLBL = {fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "10px"} as any;
+const SNOTE = {margin: "0 0 12px", fontSize: "12px", color: "#8FA396", lineHeight: "1.55"} as any;
+const STA = {width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px", color: "#E9F0EA", fontSize: "13px", lineHeight: "1.5", resize: "vertical", fontFamily: "inherit"} as any;
+const CHIP_BTN = {background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"} as any;
+const GHOST_BTN = {background: "transparent", color: "#A7B5AB", border: "1px solid rgba(160,190,170,.2)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"} as any;
+
 export function StaffDashboard({ V }: { V: any }) {
   return V.isStaff ? (<>
     <main style={{flex: "1", width: "100%", maxWidth: "1280px", margin: "0 auto", padding: "32px 28px 80px", boxSizing: "border-box"}}>
@@ -78,7 +85,14 @@ export function StaffDashboard({ V }: { V: any }) {
                 </select>
               </div>
               <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "10px", marginTop: "10px"}}>
-                <input value={(V.ncProgram) ?? ''} onChange={V.setNcProgram} placeholder="Hiring for — school / property (e.g. Texas Tech Athletics)" style={INPUT} />
+                <select value={(V.ncProgramPick) ?? ''} onChange={V.setNcProgramPick} style={INPUT}>
+                  {(V.ncProgramOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
+                    <option value={o?.id}>{o?.label}</option>
+                  </React.Fragment>))}
+                </select>
+                {V.ncCustomOn ? (<>
+                  <input value={(V.ncProgram) ?? ''} onChange={V.setNcProgram} placeholder="Type the school / property" style={INPUT} />
+                </>) : null}
                 <input value={(V.ncLoc) ?? ''} onChange={V.setNcLoc} placeholder="Location (optional)" style={INPUT} />
                 <input value={(V.ncSchool) ?? ''} onChange={V.setNcSchool} placeholder="Their school / current org (optional)" style={INPUT} />
                 <input value={(V.ncLinkedin) ?? ''} onChange={V.setNcLinkedin} placeholder="LinkedIn URL (optional)" style={INPUT} />
@@ -100,7 +114,7 @@ export function StaffDashboard({ V }: { V: any }) {
                 <button onClick={V.ncEmailInvite} disabled={!!(V.ncBlocked)} style={{background: V.ncBtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>{V.ncBusy ? 'Working…' : 'Add & email ' + V.ncLinkLabel}</button>
                 <button onClick={V.ncCopyInvite} disabled={!!(V.ncBlocked)} style={{background: "transparent", color: V.ncBlocked ? "#3A453D" : "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>{"Add & copy " + V.ncLinkLabel}</button>
                 <button onClick={V.ncManual} disabled={!!(V.ncBlocked)} style={{background: "transparent", color: V.ncBlocked ? "#3A453D" : "#A7B5AB", border: "1px solid rgba(160,190,170,.25)", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "700", cursor: "pointer"}}>Add without sending a link</button>
-                <span style={{fontSize: "12px", color: "#5C6B61"}}>Links are personal and expire 3 days after they are sent. The school / property you type here is what the candidate sees in their email and portal.</span>
+                <span style={{fontSize: "12px", color: "#5C6B61"}}>Links are personal and expire 3 days after they are sent; unfinished links get reminders at 48 and 72 hours. The school / property you pick is what the candidate sees, and it decides which job pipeline they land on (Jobs tab). Prefer candidates to fill in their own details? Copy the job’s application link from the Jobs tab.</span>
               </div>
               {V.ncSaved ? (<>
                 <div style={{fontSize: "12.5px", color: V.ncSavedColor, fontWeight: "700", marginTop: "10px", wordBreak: "break-all"}}>{V.ncSaved}</div>
@@ -121,6 +135,9 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div>
                   <div style={{fontSize: "14.5px", fontWeight: "700"}}>{p?.dName}</div>
                   <div style={{fontSize: "11.5px", color: "#5C6B61"}}>{p?.dSub}</div>
+                  {p?.grade ? (<>
+                    <div style={{fontSize: "10.5px", marginTop: "3px", fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".04em", color: p?.gradeColor}}>{"First call · "}{p?.grade}{p?.boardStage ? " · " + p.boardStage : ""}</div>
+                  </>) : null}
                   {p?.tag || p?.hasResume ? (<>
                     <div style={{fontSize: "10.5px", color: "#7E9186", marginTop: "3px", fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".04em"}}>{[p?.tag, p?.hasResume ? 'Résumé on file' : ''].filter(Boolean).join(' · ')}</div>
                   </>) : null}
@@ -165,6 +182,122 @@ export function StaffDashboard({ V }: { V: any }) {
               <button onClick={V.clearCmp} style={{background: "none", border: "none", color: "#8FA396", fontSize: "12.5px", cursor: "pointer"}}>Clear</button>
             </div>
           </>) : null}
+        </div>
+      </>) : null}
+      {V.vBoard ? (<>
+        <div style={{animation: "fadeUp .35s ease both"}}>
+          <div style={{display: "flex", alignItems: "center", gap: "18px", marginBottom: "8px", flexWrap: "wrap"}}>
+            <h1 style={{margin: "0", fontSize: "30px", fontWeight: "900", letterSpacing: "-.015em"}}>Jobs</h1>
+            {V.boardIsMgr ? (<>
+              <button onClick={V.toggleNewJob} style={{...CHIP_BTN, marginLeft: "auto", background: V.boardNewOpen ? "transparent" : "#10B981", color: V.boardNewOpen ? "#8FA396" : "#04120B", border: V.boardNewOpen ? "1px solid rgba(160,190,170,.25)" : "none", padding: "9px 16px", fontWeight: "800"}}>{V.boardNewOpen ? 'Cancel' : 'New job'}</button>
+            </>) : null}
+          </div>
+          <p style={{margin: "0 0 16px", fontSize: "12.5px", color: "#8FA396", maxWidth: "760px", lineHeight: "1.55"}}>One pipeline per role and school. Candidates are placed by what they have completed until someone moves them; every job has a public application link and a read-only board link you can send outside the team.</p>
+          {V.boardNewOpen ? (<>
+            <div style={{background: "#0F1611", border: "1px solid rgba(16,185,129,.25)", borderRadius: "14px", padding: "18px 22px", marginBottom: "16px"}}>
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "10px", alignItems: "center"}}>
+                <select value={(V.nbRole) ?? ''} onChange={V.setNbRole} style={INPUT}>
+                  {(V.nbRoles ?? []).map((r: any, $index: number) => (<React.Fragment key={$index}><option value={r}>{r}</option></React.Fragment>))}
+                </select>
+                <select value={(V.nbProgram) ?? ''} onChange={V.setNbProgram} style={INPUT}>
+                  {(V.nbProgramOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}><option value={o?.id}>{o?.label}</option></React.Fragment>))}
+                </select>
+                {V.nbCustomOn ? (<><input value={(V.nbCustom) ?? ''} onChange={V.setNbCustom} placeholder="School / property" style={INPUT} /></>) : null}
+                <button onClick={V.createJob} disabled={!!(V.nbBlocked)} style={{background: V.nbBtnBg, color: "#04120B", border: "none", borderRadius: "10px", padding: "11px 18px", fontSize: "13px", fontWeight: "800", cursor: "pointer"}}>Create job</button>
+              </div>
+            </div>
+          </>) : null}
+          {V.boardEmpty ? (<>
+            <div style={{...SCARD, color: "#8FA396", fontSize: "13.5px", lineHeight: "1.6"}}>No jobs yet. Create one above, or add a candidate on the Pipeline tab — their role and school create the job automatically.</div>
+          </>) : (<>
+            <div style={{display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px"}}>
+              {(V.boardJobs ?? []).map((j: any, $index: number) => (<React.Fragment key={$index}>
+                <button onClick={j?.on} style={{background: j?.bg, color: j?.fg, border: `1px solid ${j?.border}`, borderRadius: "99px", padding: "8px 14px", fontSize: "12.5px", fontWeight: "700", cursor: "pointer"}}>{j?.label}<span style={{opacity: ".7", marginLeft: "6px"}}>{j?.n}</span>{j?.status !== 'Open' ? <span style={{opacity: ".7", marginLeft: "6px", fontSize: "10.5px", textTransform: "uppercase", letterSpacing: ".06em"}}>{j?.status}</span> : null}</button>
+              </React.Fragment>))}
+            </div>
+            <div style={{...SCARD, padding: "16px 22px", marginBottom: "16px", display: "flex", gap: "14px 22px", alignItems: "center", flexWrap: "wrap"}}>
+              <div style={{flex: "1 1 240px"}}>
+                <div style={{fontSize: "17px", fontWeight: "800"}}>{V.boardTitle}</div>
+                <div style={{fontSize: "12.5px", color: "#8FA396", marginTop: "2px"}}>{V.boardProgram}{" · "}{V.boardTotal}{" candidate"}{V.boardTotal === 1 ? "" : "s"}</div>
+              </div>
+              {V.boardIsMgr && V.boardLive ? (<>
+                <select value={(V.boardStatus) ?? ''} onChange={V.setJobStatus} style={{...INPUT, width: "auto", padding: "8px 10px", fontSize: "12.5px"}}>
+                  {(V.jobStatusOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}><option value={o?.id}>{o?.label}</option></React.Fragment>))}
+                </select>
+                <div style={{display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap"}}>
+                  <button onClick={V.copyApply} style={CHIP_BTN}>Copy application link</button>
+                  <button onClick={V.toggleApply} title="Candidates open this link, enter their own details, and start the assessment — no staff step needed" style={{...GHOST_BTN, color: V.boardApplyOn ? "#34D399" : "#F5B84A"}}>{V.boardApplyOn ? 'applications on' : 'applications off'}</button>
+                </div>
+                <div style={{display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap"}}>
+                  <button onClick={V.copyShare} style={CHIP_BTN}>Copy external board link</button>
+                  <button onClick={V.toggleShare} title="A read-only view of this board for people outside the team — names and stages, no scores or flags" style={{...GHOST_BTN, color: V.boardShareOn ? "#34D399" : "#F5B84A"}}>{V.boardShareOn ? 'sharing on' : 'sharing off'}</button>
+                </div>
+              </>) : null}
+              {V.boardMsg ? (<><div style={{flexBasis: "100%", fontSize: "12px", color: "#34D399", wordBreak: "break-all"}}>{V.boardMsg}</div></>) : null}
+            </div>
+            {V.hasUnassigned ? (<>
+              <div style={{...SCARD, borderColor: "rgba(245,184,74,.35)", padding: "14px 22px", marginBottom: "16px"}}>
+                <div style={{...SLBL, color: "#E9D9B0"}}>Not on any job yet</div>
+                <div style={{display: "flex", flexDirection: "column", gap: "8px"}}>
+                  {(V.boardUnassigned ?? []).map((u: any, $index: number) => (<React.Fragment key={$index}>
+                    <div style={{display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap"}}>
+                      <span style={{fontSize: "13.5px", fontWeight: "700"}}>{u?.name}</span>
+                      <span style={{fontSize: "12px", color: "#8FA396", flex: "1"}}>{u?.sub}</span>
+                      <select value="" onChange={u?.assign} style={{...INPUT, width: "auto", padding: "7px 10px", fontSize: "12px"}}>
+                        {(u?.jobOpts ?? []).map((o: any, $i2: number) => (<React.Fragment key={$i2}><option value={o?.id}>{o?.label}</option></React.Fragment>))}
+                      </select>
+                    </div>
+                  </React.Fragment>))}
+                </div>
+              </div>
+            </>) : null}
+            <div style={{display: "grid", gridAutoFlow: "column", gridAutoColumns: "minmax(220px,1fr)", gap: "12px", overflowX: "auto", paddingBottom: "8px", alignItems: "start"}}>
+              {(V.boardCols ?? []).map((col: any, $index: number) => (<React.Fragment key={$index}>
+                <div style={{background: col?.dim ? "transparent" : "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "12px", minHeight: "160px"}}>
+                  <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px", padding: "2px 4px 10px"}}>
+                    <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".12em", textTransform: "uppercase", color: "#7E9186"}}>{col?.name}</span>
+                    <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#5C6B61"}}>{col?.n}</span>
+                  </div>
+                  <div style={{display: "flex", flexDirection: "column", gap: "8px"}}>
+                    {(col?.cards ?? []).map((c: any, $i2: number) => (<React.Fragment key={$i2}>
+                      <div style={{background: "#0B120E", border: "1px solid rgba(160,190,170,.12)", borderRadius: "10px", padding: "10px 12px", opacity: c?.withdrawn ? ".55" : "1"}}>
+                        <div style={{display: "flex", gap: "8px", alignItems: "center"}}>
+                          <button onClick={c?.openProfile} style={{background: "none", border: "none", padding: "0", color: "#E9F0EA", fontSize: "13.5px", fontWeight: "700", cursor: "pointer", textAlign: "left", flex: "1"}}>{c?.name}</button>
+                          {c?.grade ? (<span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", fontWeight: "800", color: c?.gradeColor, border: `1px solid ${c?.gradeColor}`, borderRadius: "6px", padding: "1px 6px"}}>{c?.grade}</span>) : null}
+                        </div>
+                        {c?.sub || c?.band ? (<div style={{fontSize: "11px", color: "#7E9186", marginTop: "3px", lineHeight: "1.45"}}>{[c?.sub, c?.band].filter(Boolean).join(' · ')}</div>) : null}
+                        <div style={{display: "flex", gap: "6px", alignItems: "center", marginTop: "8px"}}>
+                          {V.boardIsMgr ? (<>
+                            <select value={(c?.stage) ?? ''} onChange={c?.move} style={{...INPUT, flex: "1", padding: "6px 8px", fontSize: "11.5px", borderRadius: "8px"}}>
+                              {(c?.stageOpts ?? []).map((o: any, $i3: number) => (<React.Fragment key={$i3}><option value={o?.id}>{o?.label}</option></React.Fragment>))}
+                            </select>
+                          </>) : null}
+                          <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", color: "#5C6B61", whiteSpace: "nowrap"}}>{c?.days}{c?.auto ? ' · auto' : ''}</span>
+                        </div>
+                      </div>
+                    </React.Fragment>))}
+                  </div>
+                </div>
+              </React.Fragment>))}
+            </div>
+            {V.hasStrays ? (<>
+              <div style={{...SCARD, padding: "14px 22px", marginTop: "12px"}}>
+                <div style={SLBL}>In a stage that no longer exists</div>
+                <div style={{display: "flex", gap: "8px", flexWrap: "wrap"}}>
+                  {(V.boardStrays ?? []).map((c: any, $index: number) => (<React.Fragment key={$index}>
+                    <div style={{display: "flex", gap: "8px", alignItems: "center", background: "#0B120E", borderRadius: "10px", padding: "8px 12px"}}>
+                      <span style={{fontSize: "13px", fontWeight: "700"}}>{c?.name}</span>
+                      <span style={{fontSize: "11px", color: "#7E9186"}}>{c?.stage}</span>
+                      <select value="" onChange={c?.move} style={{...INPUT, width: "auto", padding: "5px 8px", fontSize: "11.5px"}}>
+                        <option value="">Move to…</option>
+                        {(c?.stageOpts ?? []).map((o: any, $i3: number) => (<React.Fragment key={$i3}><option value={o?.id}>{o?.label}</option></React.Fragment>))}
+                      </select>
+                    </div>
+                  </React.Fragment>))}
+                </div>
+              </div>
+            </>) : null}
+          </>)}
         </div>
       </>) : null}
       {V.vProfile ? (<>
@@ -251,6 +384,13 @@ export function StaffDashboard({ V }: { V: any }) {
                   <p style={{margin: "10px 0 0", fontSize: "12.5px", color: "#A7B5AB", lineHeight: "1.55"}}>{V.rpNote}</p>
                   <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".08em", textTransform: "uppercase", color: "#5C6B61", marginTop: "12px", lineHeight: "1.5"}}>{V.rpProfile}</div>
                   <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "4px"}}>{V.rpScen}</div>
+                  {V.rpCanRescore ? (<>
+                    <div style={{display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "14px"}}>
+                      <button onClick={V.rescore} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>Re-score with current rubric</button>
+                      <span style={{fontSize: "11.5px", color: V.rpScoredStale ? "#E9D9B0" : "#5C6B61", lineHeight: "1.5"}}>{V.rpScoredTxt}</span>
+                      {V.pScoreMsg ? (<span style={{fontSize: "12px", color: "#34D399", fontWeight: "700"}}>{V.pScoreMsg}</span>) : null}
+                    </div>
+                  </>) : null}
                 </div>
                 <div style={{flex: "1", minWidth: "320px"}}>
                   <div style={{display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px", gap: "12px", flexWrap: "wrap"}}>
@@ -301,6 +441,11 @@ export function StaffDashboard({ V }: { V: any }) {
                         {f?.better ? (<>
                           <div style={{fontSize: "12px", color: "#34D399", lineHeight: "1.5", marginTop: "4px"}}>
                             <span style={{color: "#5C6B61"}}>Strongest option · </span>{f?.better}
+                          </div>
+                        </>) : null}
+                        {f?.why ? (<>
+                          <div style={{fontSize: "11.5px", color: "#8FA396", lineHeight: "1.5", marginTop: "6px", paddingLeft: "10px", borderLeft: "2px solid rgba(160,190,170,.15)"}}>
+                            <span style={{color: "#5C6B61"}}>Why it scores this way · </span>{f?.why}
                           </div>
                         </>) : null}
                       </div>
@@ -385,6 +530,7 @@ export function StaffDashboard({ V }: { V: any }) {
                     <button onClick={V.toggleItems} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{V.rpItemsBtn}</button>
                   </div>
                   {V.rpItemsOpen ? (<>
+                    <p style={{margin: "12px 0 0", fontSize: "11.5px", color: "#8FA396", lineHeight: "1.55"}}>{V.rpScaleNote}{" Every option is listed with its score; the candidate’s pick is marked ▸. Disagree with a score? Change it in the Question bank — the rationale explains the current thinking."}</p>
                     <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: "14px", marginTop: "14px"}}>
                       {(V.rpItemGroups ?? []).map((g: any, $index: number) => (<React.Fragment key={$index}>
                         <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.1)", borderRadius: "10px", padding: "14px 16px"}}>
@@ -398,6 +544,17 @@ export function StaffDashboard({ V }: { V: any }) {
                                 <div style={{color: "#A7B5AB"}}><span style={{color: "#5C6B61"}}>{e?.kind}{" · "}</span>{e?.q}</div>
                                 <div><span style={{color: "#5C6B61"}}>Answer · </span><span style={{color: e?.color, fontWeight: "700"}}>{e?.answer}</span><span style={{color: "#5C6B61"}}>{" · "}{e?.signal}{" · "}{e?.score}</span></div>
                                 {e?.best ? (<div><span style={{color: "#5C6B61"}}>Strongest option · </span><span style={{color: "#8FA396"}}>{e?.best}</span></div>) : null}
+                                {(e?.options ?? []).length ? (<>
+                                  <div style={{marginTop: "6px", display: "flex", flexDirection: "column", gap: "2px"}}>
+                                    {(e?.options ?? []).map((o: any, $i3: number) => (<React.Fragment key={$i3}>
+                                      <div style={{display: "flex", gap: "8px", alignItems: "baseline", color: o?.chosen ? "#E9F0EA" : "#7E9186", fontWeight: o?.weight}}>
+                                        <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", color: o?.color, minWidth: "26px", textAlign: "right"}}>{o?.score}</span>
+                                        <span style={{flex: "1"}}>{o?.chosen ? "▸ " : ""}{o?.text}{o?.flag ? <span style={{color: "#F0A070", fontWeight: "400"}}>{" · " + o.flag}</span> : null}{o?.positive ? <span style={{color: "#34D399", fontWeight: "400"}}>{" · " + o.positive}</span> : null}</span>
+                                      </div>
+                                    </React.Fragment>))}
+                                  </div>
+                                </>) : null}
+                                {e?.why ? (<div style={{color: "#8FA396", marginTop: "6px"}}><span style={{color: "#5C6B61"}}>Why · </span>{e?.why}</div>) : null}
                               </div>
                             </React.Fragment>))}
                           </div>
@@ -417,7 +574,7 @@ export function StaffDashboard({ V }: { V: any }) {
                 <button onClick={V.toggleTr} style={{background: V.trOpen ? "transparent" : "#10B981", color: V.trOpen ? "#8FA396" : "#04120B", border: V.trOpen ? "1px solid rgba(160,190,170,.25)" : "none", borderRadius: "8px", padding: "8px 14px", fontSize: "12px", fontWeight: "800", cursor: "pointer"}}>{V.trOpen ? 'Cancel' : 'Submit a transcript for evaluation'}</button>
               </>) : null}
             </div>
-            <p style={{margin: "0 0 12px", fontSize: "12px", color: "#5C6B61", lineHeight: "1.5"}}>Paste or upload the transcript of a mock pitch, phone screen, or interview. It is stored for the assigned evaluators to read; when the AI-assisted read is switched on, an advisory summary with verbatim quotes appears alongside. Evaluators score; nothing here decides.</p>
+            <p style={{margin: "0 0 12px", fontSize: "12px", color: "#5C6B61", lineHeight: "1.5"}}>Paste or upload the transcript of the first phone call, a mock pitch, or an interview. A first call produces an executive summary for the next round — what was covered, what to ask next, your own read folded in — and a grade from A+ to F against the role profile. Everything here is advisory; people decide.</p>
             {V.trOpen ? (<>
               <div style={{background: "#0B120E", borderRadius: "12px", padding: "16px 18px", marginBottom: "14px"}}>
                 <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "10px"}}>
@@ -433,8 +590,20 @@ export function StaffDashboard({ V }: { V: any }) {
                   </label>
                 </div>
                 <textarea value={(V.trTxt) ?? ''} onChange={V.setTrTxt} rows={8} placeholder="Paste the transcript here (Zoom, Meet, Teams, Otter…). Timestamps are fine — they are stripped." style={{...INPUT, marginTop: "10px", resize: "vertical", lineHeight: "1.5", fontFamily: "inherit"}} />
+                <div style={{...MONO_LABEL, marginTop: "12px", marginBottom: "6px"}}>{V.trNotesLabel}</div>
+                <textarea value={(V.trNotes) ?? ''} onChange={V.setTrNotes} rows={3} placeholder="e.g. On time and prepared; asked sharp questions about the comp plan. Vague on why they left the last role — worth pressing." style={{...INPUT, resize: "vertical", lineHeight: "1.5", fontFamily: "inherit"}} />
+                {V.trIsCall ? (<>
+                  <div style={{marginTop: "12px"}}>
+                    <button onClick={V.togglePrompt} style={{background: "none", border: "none", color: "#8FA396", fontSize: "12px", cursor: "pointer", padding: "0", textDecoration: "underline"}}>{V.promptBtn}</button>
+                    {V.promptOpen ? (<>
+                      <p style={{margin: "8px 0 6px", fontSize: "11.5px", color: "#5C6B61", lineHeight: "1.5"}}>{"These instructions drive the evaluation of every first call, for every candidate. Write them in plain English; they save automatically and apply to the next transcript you submit."}{V.callPromptIsDefault ? '' : ' Currently customized.'}</p>
+                      <textarea value={(V.callPrompt) ?? ''} onChange={V.setCallPrompt} rows={10} style={{...INPUT, resize: "vertical", lineHeight: "1.55", fontFamily: "inherit", fontSize: "12.5px"}} />
+                      {!V.callPromptIsDefault ? (<><button onClick={V.resetCallPrompt} style={{background: "none", border: "none", color: "#F5B84A", fontSize: "11.5px", cursor: "pointer", padding: "0", marginTop: "6px", textDecoration: "underline"}}>Reset to the default instructions</button></>) : null}
+                    </>) : null}
+                  </div>
+                </>) : null}
                 <div style={{display: "flex", gap: "10px", alignItems: "center", marginTop: "10px", flexWrap: "wrap"}}>
-                  <button onClick={V.submitTr} disabled={!V.trOk} style={{background: V.trBtnBg, color: "#04120B", border: "none", borderRadius: "9px", padding: "10px 16px", fontSize: "12.5px", fontWeight: "800", cursor: "pointer"}}>{V.trBusy ? 'Reviewing…' : 'Submit for evaluation'}</button>
+                  <button onClick={V.submitTr} disabled={!V.trOk} style={{background: V.trBtnBg, color: "#04120B", border: "none", borderRadius: "9px", padding: "10px 16px", fontSize: "12.5px", fontWeight: "800", cursor: "pointer"}}>{V.trBusy ? 'Evaluating…' : (V.trIsCall ? 'Submit & evaluate the call' : 'Submit for evaluation')}</button>
                   <span style={{fontSize: "11.5px", color: "#5C6B61"}}>{V.trCount}</span>
                 </div>
               </div>
@@ -445,13 +614,36 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div style={{background: "#0B120E", borderRadius: "12px", padding: "16px 18px"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap"}}>
                     <div style={{flex: "1"}}>
-                      <div style={{fontSize: "14px", fontWeight: "800"}}>{t?.title}</div>
+                      <div style={{fontSize: "14px", fontWeight: "800", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap"}}>{t?.title}{t?.grade ? <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", fontWeight: "800", color: t?.gradeColor, border: `1px solid ${t?.gradeColor}`, borderRadius: "6px", padding: "1px 7px"}}>{t?.grade}</span> : null}</div>
                       <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "2px"}}>{t?.kind}{" · "}{t?.meta}</div>
                     </div>
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".06em", textTransform: "uppercase", color: t?.statusColor}}>{t?.statusTxt}</span>
                     <button onClick={t?.toggle} style={{background: "transparent", color: "#A7B5AB", border: "1px solid rgba(160,190,170,.2)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{t?.toggleTxt}</button>
                   </div>
-                  {t?.hasReview ? (<>
+                  {t?.hasReview && t?.isCall ? (<>
+                    <div style={{display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: "16px", marginTop: "14px", alignItems: "start"}}>
+                      <div style={{textAlign: "center", background: "#0F1611", border: `1px solid ${t?.gradeColor}`, borderRadius: "12px", padding: "14px 18px", minWidth: "72px"}}>
+                        <div style={{fontFamily: "'Barlow Condensed',sans-serif", fontSize: "40px", fontWeight: "800", lineHeight: "1", color: t?.gradeColor}}>{t?.grade || "—"}</div>
+                        <div style={{...MONO_LABEL, marginTop: "6px", marginBottom: "0"}}>Grade</div>
+                      </div>
+                      <div>
+                        <div style={{...MONO_LABEL, color: "#34D399", marginBottom: "4px"}}>Executive summary for the next round</div>
+                        <p style={{margin: "0 0 8px", fontSize: "13.5px", color: "#E9F0EA", lineHeight: "1.65"}}>{t?.summary}</p>
+                        {t?.gradeRationale ? (<div style={{fontSize: "12px", color: "#A7B5AB", lineHeight: "1.5"}}><span style={{color: "#5C6B61"}}>Grade rationale · </span>{t?.gradeRationale}</div>) : null}
+                      </div>
+                    </div>
+                    <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "12px", marginTop: "14px", fontSize: "12.5px", lineHeight: "1.55"}}>
+                      <div><div style={{...MONO_LABEL, marginBottom: "4px"}}>Leadership should know</div>{(t?.bullets ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#D5DED7"}}>{"· "}{s}</div>))}</div>
+                      <div><div style={{...MONO_LABEL, color: "#F5B84A", marginBottom: "4px"}}>Ask next</div>{(t?.askNext ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#D5DED7"}}>{"· "}{s}</div>))}</div>
+                      <div><div style={{...MONO_LABEL, marginBottom: "4px"}}>Already covered — don’t re-ask</div>{(t?.covered ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#8FA396"}}>{"· "}{s}</div>))}</div>
+                      <div><div style={{...MONO_LABEL, color: "#34D399", marginBottom: "4px"}}>Strengths</div>{(t?.strengths ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#D5DED7"}}>{"· "}{s}</div>))}</div>
+                      <div><div style={{...MONO_LABEL, color: "#F87171", marginBottom: "4px"}}>Concerns</div>{(t?.concerns ?? []).map((s: any, $i2: number) => (<div key={$i2} style={{color: "#D5DED7"}}>{"· "}{s}</div>))}</div>
+                    </div>
+                    {t?.screenerNotes ? (<div style={{marginTop: "12px", fontSize: "12.5px", color: "#A7B5AB", lineHeight: "1.55", paddingLeft: "10px", borderLeft: "2px solid rgba(160,190,170,.2)"}}><span style={{color: "#5C6B61"}}>Screener’s read · </span>{t?.screenerNotes}</div>) : null}
+                    {t?.caution ? (<p style={{margin: "10px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.5"}}>{t?.caution}</p>) : null}
+                  </>) : null}
+                  {!t?.hasReview && t?.screenerNotes ? (<div style={{marginTop: "12px", fontSize: "12.5px", color: "#A7B5AB", lineHeight: "1.55", paddingLeft: "10px", borderLeft: "2px solid rgba(160,190,170,.2)"}}><span style={{color: "#5C6B61"}}>Screener’s read · </span>{t?.screenerNotes}</div>) : null}
+                  {t?.hasReview && !t?.isCall ? (<>
                     <p style={{margin: "12px 0 10px", fontSize: "13px", color: "#D5DED7", lineHeight: "1.6"}}>{t?.summary}</p>
                     <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "10px"}}>
                       {(t?.comps ?? []).map((c: any, $i2: number) => (<React.Fragment key={$i2}>
@@ -670,7 +862,7 @@ export function StaffDashboard({ V }: { V: any }) {
       {V.vBank ? (<>
         <div style={{animation: "fadeUp .35s ease both"}}>
           <h1 style={{margin: "0 0 6px", fontSize: "30px", fontWeight: "900", letterSpacing: "-.015em"}}>{"Assessment & question bank"}</h1>
-          <p style={{margin: "0 0 22px", fontSize: "13px", color: "#8FA396", maxWidth: "700px", lineHeight: "1.6"}}>Every scenario and scoring key is editable and version-controlled. Cohorts are locked to the version they completed — edits create a new version, never rewrite history.</p>
+          <p style={{margin: "0 0 22px", fontSize: "13px", color: "#8FA396", maxWidth: "760px", lineHeight: "1.6"}}>Every scenario and worst-move item, with the score behind each option and the reasoning in plain words. Change a score, a flag label, the wording, or the rationale and it applies to everyone scored from then on; reports already on file keep their numbers until you re-score them from the profile.</p>
           <div style={{display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center"}}>
             <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginRight: "6px"}}>Profile</span>
             {(V.bkProfChips ?? []).map((c: any, $index: number) => (<React.Fragment key={$index}>
@@ -683,35 +875,50 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div onClick={b?.pick} role="button" tabIndex="0" style={{display: "flex", alignItems: "center", gap: "12px", background: b?.bg, border: `1px solid ${b?.border}`, borderRadius: "12px", padding: "14px 16px", cursor: "pointer"}}>
                   <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#7E9186"}}>{b?.num}</span>
                   <span style={{flex: "1", fontSize: "13.5px", fontWeight: "700"}}>{b?.title}</span>
+                  {b?.edited ? (<span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", color: "#F5B84A", background: "rgba(245,184,74,.12)", padding: "3px 8px", borderRadius: "99px"}}>edited</span>) : null}
                   <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", color: "#34D399", background: "rgba(16,185,129,.1)", padding: "3px 8px", borderRadius: "99px"}}>{b?.ver}</span>
                 </div>
               </React.Fragment>))}
             </div>
             <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "24px"}}>
-              <div style={{display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px"}}>
+              <div style={{display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px", flexWrap: "wrap"}}>
                 <div style={{fontSize: "17px", fontWeight: "800", flex: "1"}}>{V.bankTitle}</div>
-                <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", color: "#34D399"}}>{V.bankVerTxt}</span>
+                {V.bankEdited ? (<span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".08em", textTransform: "uppercase", color: "#F5B84A", background: "rgba(245,184,74,.12)", padding: "3px 8px", borderRadius: "99px"}}>edited</span>) : null}
               </div>
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "7px"}}>Scenario stem</div>
-              <textarea value={(V.bankStem) ?? ''} onChange={V.setBankStem} rows="3" style={{width: "100%", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "12px", color: "#E9F0EA", fontSize: "13.5px", lineHeight: "1.55", resize: "vertical", marginBottom: "16px"}} />
-              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "7px"}}>{"Response options & scoring key"}</div>
-              <div style={{display: "flex", flexDirection: "column", gap: "10px"}}>
+              <p style={{margin: "0 0 16px", fontSize: "12px", color: "#8FA396", lineHeight: "1.55"}}>{V.bankKind}</p>
+              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "7px"}}>Question</div>
+              <textarea value={(V.bankStem) ?? ''} onChange={V.setBankStem} rows={3} disabled={!V.bankCanEdit} style={{...STA, marginBottom: "16px"}} />
+              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "7px"}}>{"Options · score 0–100 · flag / positive label"}</div>
+              <div style={{display: "flex", flexDirection: "column", gap: "12px"}}>
                 {(V.bankOpts ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}>
-                  <div style={{display: "flex", gap: "10px", alignItems: "flex-start"}}>
+                  <div style={{display: "grid", gridTemplateColumns: "20px minmax(0,1fr) 76px", gap: "10px", alignItems: "start"}}>
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "12px", color: "#7E9186", paddingTop: "13px"}}>{o?.letter}</span>
-                    <textarea value={(o?.val) ?? ''} onChange={o?.set} rows="2" style={{flex: "1", boxSizing: "border-box", background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "10px", padding: "11px", color: "#E9F0EA", fontSize: "13px", lineHeight: "1.5", resize: "vertical"}} />
-                    <div style={{display: "flex", flexDirection: "column", gap: "5px", paddingTop: "6px"}}>
-                      <button onClick={o?.setBest} style={{background: o?.bestBg, color: o?.bestFg, border: "1px solid rgba(16,185,129,.35)", borderRadius: "7px", padding: "5px 10px", fontSize: "10.5px", fontWeight: "700", cursor: "pointer"}}>Best</button>
-                      <button onClick={o?.setWorst} style={{background: o?.worstBg, color: o?.worstFg, border: "1px solid rgba(245,184,74,.35)", borderRadius: "7px", padding: "5px 10px", fontSize: "10.5px", fontWeight: "700", cursor: "pointer"}}>Worst</button>
+                    <div>
+                      <textarea value={(o?.text) ?? ''} onChange={o?.setText} rows={2} disabled={!V.bankCanEdit} style={STA} />
+                      {!V.bankIsWorst ? (<>
+                        <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "6px"}}>
+                          <input value={(o?.flag) ?? ''} onChange={o?.setFlag} disabled={!V.bankCanEdit} placeholder="Red-flag label (if this answer should raise one)" style={{...INPUT, padding: "8px 10px", fontSize: "12px", color: "#F0A070"}} />
+                          <input value={(o?.positive) ?? ''} onChange={o?.setPositive} disabled={!V.bankCanEdit} placeholder="Positive-signal label" style={{...INPUT, padding: "8px 10px", fontSize: "12px", color: "#34D399"}} />
+                        </div>
+                      </>) : null}
+                    </div>
+                    <div>
+                      <input type="number" min="0" max="100" value={(o?.score) ?? ''} onChange={o?.setScore} disabled={!V.bankCanEdit} style={{...INPUT, padding: "10px 8px", textAlign: "center", fontFamily: "'JetBrains Mono',monospace", color: o?.color, fontWeight: "700"}} />
+                      <div style={{fontSize: "10px", color: o?.color, textAlign: "center", marginTop: "4px", fontFamily: "'JetBrains Mono',monospace"}}>{o?.signal}</div>
                     </div>
                   </div>
                 </React.Fragment>))}
               </div>
-              <div style={{display: "flex", alignItems: "center", gap: "14px", marginTop: "18px"}}>
-                <button onClick={V.saveBank} style={{background: "#10B981", color: "#04120B", border: "none", borderRadius: "10px", padding: "12px 22px", fontSize: "13.5px", fontWeight: "800", cursor: "pointer"}}>{"Save as "}{V.bankNextVer}</button>
-                <span style={{fontSize: "12.5px", color: "#34D399", fontWeight: "700"}}>{V.bankSavedNote}</span>
-                <span style={{fontSize: "11.5px", color: "#5C6B61", marginLeft: "auto"}}>Cohort 2026-B is locked to v1.2</span>
-              </div>
+              <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", margin: "16px 0 7px"}}>Why it scores this way — shown to staff on every report</div>
+              <textarea value={(V.bankWhy) ?? ''} onChange={V.setBankWhy} rows={4} disabled={!V.bankCanEdit} style={STA} />
+              <p style={{margin: "10px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.55"}}>{V.bankScaleNote}</p>
+              {V.bankCanEdit ? (<>
+                <div style={{display: "flex", alignItems: "center", gap: "14px", marginTop: "18px", flexWrap: "wrap"}}>
+                  <button onClick={V.saveBank} disabled={!V.bankDirty} style={{background: V.bankDirty ? "#10B981" : "#20302680", color: "#04120B", border: "none", borderRadius: "10px", padding: "12px 22px", fontSize: "13.5px", fontWeight: "800", cursor: "pointer"}}>Save changes</button>
+                  {V.bankEdited ? (<button onClick={V.revertBank} style={{background: "transparent", color: "#F5B84A", border: "1px solid rgba(245,184,74,.35)", borderRadius: "10px", padding: "11px 18px", fontSize: "12.5px", fontWeight: "700", cursor: "pointer"}}>Revert to original</button>) : null}
+                  <span style={{fontSize: "12.5px", color: "#34D399", fontWeight: "700", lineHeight: "1.5"}}>{V.bankSavedNote}</span>
+                </div>
+              </>) : null}
             </div>
           </div>
         </div>
@@ -1264,7 +1471,7 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "14px"}}>Candidate data</div>
                 <div style={{display: "flex", alignItems: "center", gap: "14px", marginBottom: "14px"}}>
                   <span style={{fontSize: "13.5px", flex: "1"}}>Retention period</span>
-                  <select value={(V.retention) ?? ''} onChange={V.setRetention} style={{background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "9px", padding: "9px 12px", color: "#E9F0EA", fontSize: "13px"}}>
+                  <select value={(V.retention) ?? ''} onChange={V.setRetention} disabled={!V.canEditCore} style={{background: "#0B120E", border: "1px solid rgba(160,190,170,.18)", borderRadius: "9px", padding: "9px 12px", color: "#E9F0EA", fontSize: "13px"}}>
                     <option>12 months</option>
                     <option>24 months</option>
                     <option>36 months</option>
@@ -1331,6 +1538,28 @@ export function StaffDashboard({ V }: { V: any }) {
                   </div>
                   <p style={{margin: "14px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.55"}}>Groups are self-reported and optional. Sample sizes are currently too small for adverse-impact analysis (4/5ths rule requires larger n). Shown for monitoring discipline only.</p>
                 </>) : null}
+              </div>
+              <div style={SCARD}>
+                <div style={SLBL}>Schools / properties we hire for</div>
+                <p style={SNOTE}>One per line. Used in the Add-a-candidate form, when creating jobs, and as the dropdown candidates pick from in Stage 2.</p>
+                <textarea value={(V.schoolsTxt) ?? ''} onChange={V.setSchoolsTxt} onBlur={V.commitSchools} rows={5} disabled={!V.settingsEditable} style={STA} />
+              </div>
+              <div style={SCARD}>
+                <div style={SLBL}>Pipeline stages (Jobs board)</div>
+                <p style={SNOTE}>One per line, in order. Candidates are placed automatically by what they have completed until someone moves them by hand.</p>
+                <textarea value={(V.stagesTxt) ?? ''} onChange={V.setStagesTxt} onBlur={V.commitStages} rows={8} disabled={!V.settingsEditable} style={STA} />
+              </div>
+              <div style={SCARD}>
+                <div style={SLBL}>First-call evaluation instructions</div>
+                <p style={SNOTE}>{"What the evaluation follows when a first-call transcript is submitted on a profile. Plain English; saves automatically."}{V.callPromptIsDefault ? ' Currently the default.' : ' Currently customized.'}</p>
+                <textarea value={(V.callPrompt) ?? ''} onChange={V.setCallPrompt} rows={12} disabled={!V.settingsEditable} style={{...STA, fontSize: "12.5px"}} />
+                {!V.callPromptIsDefault && V.settingsEditable ? (<button onClick={V.resetCallPrompt} style={{background: "none", border: "none", color: "#F5B84A", fontSize: "11.5px", cursor: "pointer", padding: "0", marginTop: "8px", textDecoration: "underline"}}>Reset to the default instructions</button>) : null}
+              </div>
+              <div style={SCARD}>
+                <div style={SLBL}>Reminders</div>
+                <p style={SNOTE}>Candidates who haven’t finished their link get a reminder 48 hours after it was sent and a final one at 72 hours, which also refreshes the link. Runs every hour automatically (once a day on the Vercel Hobby plan); this button runs the same check now.</p>
+                {V.canRemind ? (<button onClick={V.remindNow} style={CHIP_BTN}>Send due reminders now</button>) : null}
+                {V.remindMsg ? (<div style={{fontSize: "12.5px", color: "#34D399", marginTop: "10px", lineHeight: "1.5"}}>{V.remindMsg}</div>) : null}
               </div>
               <div style={{background: "#0F1611", border: "1px solid rgba(160,190,170,.13)", borderRadius: "14px", padding: "22px 24px"}}>
                 <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "12px"}}>AI decision-support rules</div>

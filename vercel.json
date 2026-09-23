@@ -5,8 +5,13 @@
       "destination": "/index.html"
     }
   ],
+  "crons": [
+    { "path": "/api/remind", "schedule": "0 * * * *" }
+  ],
   "functions": {
     "api/transcript.ts": { "maxDuration": 60 },
-    "api/session.ts": { "maxDuration": 30 }
+    "api/session.ts": { "maxDuration": 30 },
+    "api/remind.ts": { "maxDuration": 60 },
+    "api/apply.ts": { "maxDuration": 30 }
   }
 }

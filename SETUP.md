@@ -91,14 +91,25 @@ With this, scheduling a combine creates the event on a Peak calendar, invites th
    - `GOOGLE_CALENDAR_OWNER` — the Workspace user whose calendar hosts the sessions, e.g. `wesley@peaksportsmgmt.com`
 5. **Deployments → Redeploy**. Schedule a test session with yourself as a candidate: you should see a Google Calendar invitation and a Meet link within a minute.
 
-## Part 8 — AI-assisted transcript read (optional)
+## Part 8 — AI-assisted transcript evaluation (optional)
 
 1. **console.anthropic.com** → API Keys → Create key. Add it to Vercel as `ANTHROPIC_API_KEY`, then Redeploy.
-2. Submitting a transcript now also produces an advisory read: per-competency ratings with verbatim quotes, strengths, concerns, and interview follow-ups. It is labelled as assistance; evaluators score and the panel decides. Keep counsel in the loop — some jurisdictions regulate automated tools in hiring even when advisory.
+2. **First calls:** on a candidate's profile, **Submit a transcript for evaluation** → kind *First call (phone screen)* → paste the transcript, add **your initial read** → **Submit & evaluate the call**. You get an executive summary for the next round, “Already covered — don’t re-ask”, “Ask next”, strengths/concerns against the role profile, and a grade **A+ – F**. The grade shows on the pipeline row and the Jobs board.
+3. **The instructions it follows** are plain English and editable: **Edit the evaluation instructions** under the transcript form, or **Settings → First-call evaluation instructions**. Max (any hiring manager) can rewrite them; they save automatically and apply to the next transcript.
+4. Mock-pitch and interview transcripts still get the competency read with verbatim quotes. Everything is labelled advisory; evaluators score and the panel decides. Keep counsel in the loop — some jurisdictions regulate automated tools in hiring even when advisory.
+
+## Part 9 — Jobs board, application links, reminders
+
+- **Jobs tab** — one pipeline per role + school. Candidates land on a job automatically from the role and school you pick when adding them (or when they apply through a link). Stages are set by what they’ve completed until you move them with the dropdown on a card. Edit the stage list in **Settings → Pipeline stages**.
+- **Copy application link** — a public page where candidates enter their own details and go straight into the assessment; no staff step. Switch it off per job with *applications off*.
+- **Copy external board link** — a read-only view of that job’s board (names, stages, progress chips; no scores or flags) for people outside the team. Switch it off with *sharing off*.
+- **Reminders** — a candidate who hasn’t finished their link gets an email 48 hours after it was sent and a final one at 72 hours (which refreshes the link). Vercel runs `/api/remind` hourly from `vercel.json` (Pro plan; Hobby runs cron once a day). Set `CRON_SECRET` in Vercel to any long random string so only Vercel can trigger it. **Settings → Send due reminders now** runs the same check on demand.
+- **Schools** — the list candidates choose from in Stage 2 (and staff use when adding candidates or jobs) lives in **Settings → Schools / properties**.
+- **Question bank** — every scenario and worst-move item shows the score behind each option and the reasoning in plain words; admins can change scores, flag labels, wording, and the rationale. Changes apply to everyone scored from then on; re-score existing reports from the profile.
 
 ## Upgrading an existing database
 
-After uploading a new version of the code: Supabase → **SQL Editor** → paste the whole `supabase/schema.sql` → **Run** again. It adds the new columns, the transcripts table, the file bucket, and the combine-link functions without touching existing data, and moves candidates from the earlier role titles to the three current ones. Existing scouting reports show a **Re-score with evidence** button on the profile — click it once to attach the answer-level evidence to reports scored before this version.
+After uploading a new version of the code: Supabase → **SQL Editor** → paste the whole `supabase/schema.sql` → **Run** again. It adds new tables and columns without touching existing data (v3.2 adds jobs, pipeline stages, reminder tracking, transcript grades, and the public board / application functions, and attaches existing candidates to a job per role + school). Existing scouting reports show a **Re-score with evidence** button on the profile — click it once to attach the answer-level evidence to reports scored before this version.
 
 ---
 
