@@ -220,7 +220,7 @@ export function CandidatePortal({ V }: { V: any }) {
               <button onClick={V.bkBack} style={{background: "none", border: "none", color: "#8FA396", fontSize: "13px", cursor: "pointer", padding: "0", textDecoration: "underline"}} className="ps2">Change previous answer</button>
             </>) : null}
           </div>
-          <div style={KICKER}>{"Stage 03 · Sales Decisions · "}{V.bkNum}{" of "}{V.bkTotal}</div>
+          <div style={KICKER}>{"Stage 03 · Sales Decisions · "}{V.bkNum}{" of "}{V.bkTotal}{V.bkNotScored ? " · not scored" : ""}</div>
           <h1 style={{...H1, margin: "0 0 16px", fontSize: "clamp(30px,8cqw,40px)"}}>{V.bkKindLabel}</h1>
           <div style={{display: "flex", alignItems: "center", gap: "14px", marginBottom: "18px"}}>
             <div style={{flex: "1", height: "6px", background: "#121A15", borderRadius: "99px", overflow: "hidden"}}>
@@ -287,7 +287,7 @@ export function CandidatePortal({ V }: { V: any }) {
             <div style={{...CARD, padding: "24px"}}>
               <div style={{...KICKER, marginBottom: "10px"}}>Exercise B</div>
               <div style={{fontSize: "18px", fontWeight: "800", marginBottom: "8px"}}>The Resourcefulness Case</div>
-              <p style={{margin: "0 0 16px", fontSize: "13.5px", lineHeight: "1.6", color: "#8FA396"}}>A $25K property, no lead flow, incomplete CRM, 30 days to build momentum. Show us your first moves, your math, and your fallback plan. Submit it before your live session — your evaluators read it ahead of time.</p>
+              <p style={{margin: "0 0 16px", fontSize: "13.5px", lineHeight: "1.6", color: "#8FA396"}}>{V.caseSummary}{" Submit it before your live session — your evaluators read it ahead of time."}</p>
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", letterSpacing: ".08em", textTransform: "uppercase", color: V.s5bStatusColor, marginBottom: "14px"}}>{V.s5bStatus}</div>
               <button onClick={V.goS5b} style={{background: V.s5bBtnBg, color: V.s5bBtnFg, border: V.s5bBtnBorder, borderRadius: "10px", padding: "11px 20px", fontSize: "13.5px", fontWeight: "700", cursor: "pointer"}}>{V.s5bBtnTxt}</button>
             </div>
@@ -382,16 +382,20 @@ export function CandidatePortal({ V }: { V: any }) {
         <div style={{animation: "fadeUp .35s ease both", maxWidth: "720px"}}>
           <button onClick={V.goS5} style={BACK} className="ps2">← Back to combine</button>
           <div style={KICKER}>Exercise B · The Resourcefulness Case</div>
-          <h1 style={{...H1, margin: "0 0 18px", fontSize: "clamp(30px,8cqw,38px)"}}>Build momentum from almost nothing.</h1>
+          <h1 style={{...H1, margin: "0 0 18px", fontSize: "clamp(30px,8cqw,38px)"}}>{V.caseTitle}</h1>
           <div style={{...CARD, padding: "24px 26px", marginBottom: "20px"}}>
             <div style={{...LABEL, marginBottom: "10px"}}>Your brief (fictional)</div>
-            <p style={{margin: "0", fontSize: "14.5px", lineHeight: "1.7", color: "#D5DED7"}}>
-              {"You have joined a university athletics property currently generating approximately "}
-              <b>$25,000</b>
-              {" in annual sponsorship revenue. There is no meaningful inbound lead flow, the CRM is incomplete, the school has limited brand awareness, and you have "}
-              <b>30 days</b>
-              {" to build momentum. You have access to a laptop, phone, CRM, university stakeholders, and public market information."}
-            </p>
+            <p style={{margin: "0", fontSize: "14.5px", lineHeight: "1.7", color: "#D5DED7"}}>{V.caseIntro}</p>
+            {(V.caseFacts ?? []).length ? (<>
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "8px 20px", marginTop: "14px"}}>
+                {(V.caseFacts ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
+                  <div style={{display: "flex", gap: "10px", alignItems: "baseline", fontSize: "14px", lineHeight: "1.5", color: "#D5DED7"}}>
+                    <span style={{color: "#10B981", fontWeight: "800"}}>/</span>
+                    {f}
+                  </div>
+                </React.Fragment>))}
+              </div>
+            </>) : null}
           </div>
           <div style={{display: "flex", gap: "8px", marginBottom: "18px", flexWrap: "wrap"}}>
             {(V.caseModes ?? []).map((m: any, $index: number) => (<React.Fragment key={$index}>

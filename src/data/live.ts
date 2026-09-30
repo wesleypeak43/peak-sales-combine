@@ -2,6 +2,7 @@
 // Live data layer — Supabase (Postgres + Auth) behind the same view-model the screens already render.
 // When VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are missing, or the URL has ?demo=1, the app stays in demo mode.
 import { createClient } from '@supabase/supabase-js';
+import { sourceLabel } from './defaults';
 
 const ENV = (import.meta && import.meta.env) || {};
 const SB_URL = ENV.VITE_SUPABASE_URL, SB_KEY = ENV.VITE_SUPABASE_ANON_KEY;
@@ -164,6 +165,8 @@ export class LiveStore {
   setStage(candidateId, stage) { return this._run(sb.from('candidates').update({ ta_stage: stage || '', stage_changed_at: new Date().toISOString() }).eq('id', candidateId)); }
   assignJob(candidateId, jobId, role, program) { const patch: any = { job_id: jobId || null }; if (role) patch.role = role; if (program != null) patch.program = program; return this._run(sb.from('candidates').update(patch).eq('id', candidateId)); }
   remindNow() { return this.api('/api/remind', {}); }
+  reevaluateTranscript(transcriptId) { return this.api('/api/transcript', { action: 'reevaluate', transcriptId }); }
+  async careersOpen() { const { data, error } = await sb.rpc('careers_open'); if (error) throw new Error(error.message); return data; }
   async boardOpen(token) { const { data, error } = await sb.rpc('board_open', { p_token: token }); if (error) throw new Error(error.message); return data; }
   async applyOpen(token) { const { data, error } = await sb.rpc('apply_open', { p_token: token }); if (error) throw new Error(error.message); return data; }
   applySubmit(body) { return this.api('/api/apply', body); }
@@ -282,14 +285,16 @@ export class LiveStore {
         token: c.token, link: origin() + '/?invite=' + c.token, inviteState, expired, inviteSent: !!c.invite_sent_at, opened: !!c.opened_at,
         resendRequested, done, progress: P, report: rp, scoredAt: c.scored_at, hasSession: !!ses, sessionId: ses ? ses.id : null, canSchedule,
         evalCount: E.length, evaluations: E, transcripts: T, withdrawn: !!P.withdrawn, expiresAt: c.invite_expires_at, createdAt: c.created_at,
-        jobId: c.job_id || null, taStage: c.ta_stage || '', autoStage, stageTxt: c.ta_stage || autoStage, stageAuto: !c.ta_stage, stageChangedAt: c.stage_changed_at || c.created_at, callGrade, reminders, hasFirstCall: firstCall.length > 0, assessmentDone: !!done.s3
+        jobId: c.job_id || null, taStage: c.ta_stage || '', autoStage, stageTxt: c.ta_stage || autoStage, stageAuto: !c.ta_stage, stageChangedAt: c.stage_changed_at || c.created_at, callGrade, reminders, hasFirstCall: firstCall.length > 0, assessmentDone: !!done.s3,
+        utm: c.utm || {}, sourceLabel: sourceLabel(c), campaign: (c.utm || {}).utm_campaign || '', adContent: (c.utm || {}).utm_content || '', appliedAt: c.applied_at || null
       };
     });
     const candById = Object.fromEntries(candidates.map(c => [c.id, c]));
     const sessions = R.sessions.map(s => { const c = candById[s.candidate_id] || {}; return { id: s.id, candId: s.candidate_id, cand: c.name || '\u2014', role: c.role || '', when: s.when_txt, startsAt: s.starts_at, duration: s.duration_min || 60, e1: s.e1, e2: s.e2, evals: short(s.e1) + ' + ' + short(s.e2), link: s.link || '\u2014', combineLink: s.token ? origin() + '/?combine=' + s.token : '', calendar: s.calendar_event_id ? 'Google Calendar' : 'email + .ics', ver: s.ver || 'v1.2', status: s.status || 'Confirmed' }; });
     const accoms = R.accommodations.map(a => { const c = candById[a.candidate_id] || {}; return { id: a.id, candId: a.candidate_id, cand: (c.name || '\u2014') + ' \u00b7 ' + (c.anon || ''), t: fmtT(a.created_at), txt: R.details[a.id] || '(request details are visible to hiring managers)', status: a.status, resolution: a.resolution || '' }; });
     const transcripts = (R.transcripts || []).map(t => ({ id: t.id, candId: t.candidate_id, kind: t.kind, title: t.title || '', txt: t.txt || '', source: t.source_name || '', by: short(t.uploaded_by), t: fmtT(t.created_at), review: t.review || null, status: t.review_status || 'none', notes: t.notes || '', grade: t.grade || '' }));
-    const jobs = (R.jobs || []).map(j => ({ id: j.id, title: j.title, program: j.program || '', label: j.title + (j.program ? ' \u00b7 ' + j.program : ''), status: j.status || 'Open', shareEnabled: j.share_enabled !== false, applyEnabled: j.apply_enabled !== false, shareLink: origin() + '/?board=' + j.share_token, applyLink: origin() + '/?apply=' + j.apply_token, n: candidates.filter(c => c.jobId === j.id).length, createdAt: j.created_at }));
+    const jobs = (R.jobs || []).map(j => ({ id: j.id, title: j.title, program: j.program || '', label: j.title + (j.program ? ' \u00b7 ' + j.program : ''), status: j.status || 'Open', shareEnabled: j.share_enabled !== false, applyEnabled: j.apply_enabled !== false, shareLink: origin() + '/?board=' + j.share_token, applyLink: origin() + '/?apply=' + j.apply_token, applyToken: j.apply_token, n: candidates.filter(c => c.jobId === j.id).length, createdAt: j.created_at,
+      description: j.description || '', location: j.location || '', comp: j.comp || '', employmentType: j.employment_type || 'Full-time', posted: !!j.posted, postedAt: j.posted_at || null }));
     const applications = Object.fromEntries(candidates.map(c => [c.id, (c.progress && c.progress.ev) || []]));
     const decisions = R.decisions.map(d => { const c = candById[d.candidate_id] || {}; return { id: d.id, candId: d.candidate_id, cand: c.name || '\u2014', role: c.role || '', decision: d.decision, by: d.by_label || short(d.decided_by), t: fmtT(d.created_at), rationale: d.rationale || '', agree: d.agree || '\u2014' }; });
     const n = f => candidates.filter(f).length;

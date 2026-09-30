@@ -93,10 +93,12 @@ With this, scheduling a combine creates the event on a Peak calendar, invites th
 
 ## Part 8 — AI-assisted transcript evaluation (optional)
 
-1. **console.anthropic.com** → API Keys → Create key. Add it to Vercel as `ANTHROPIC_API_KEY`, then Redeploy.
-2. **First calls:** on a candidate's profile, **Submit a transcript for evaluation** → kind *First call (phone screen)* → paste the transcript, add **your initial read** → **Submit & evaluate the call**. You get an executive summary for the next round, “Already covered — don’t re-ask”, “Ask next”, strengths/concerns against the role profile, and a grade **A+ – F**. The grade shows on the pipeline row and the Jobs board.
-3. **The instructions it follows** are plain English and editable: **Edit the evaluation instructions** under the transcript form, or **Settings → First-call evaluation instructions**. Max (any hiring manager) can rewrite them; they save automatically and apply to the next transcript.
-4. Mock-pitch and interview transcripts still get the competency read with verbatim quotes. Everything is labelled advisory; evaluators score and the panel decides. Keep counsel in the loop — some jurisdictions regulate automated tools in hiring even when advisory.
+1. **console.anthropic.com** → API Keys → Create key. **Scope must be a workspace (Default), not Organization** — an Organization-scoped admin key is rejected by the evaluation. Copy only the key itself (starts `sk-ant-api…`).
+2. Vercel → Settings → Environment Variables → `ANTHROPIC_API_KEY` = the key (no quotes, no spaces) → Save → Deployments → ⋯ → Redeploy.
+3. **First calls:** on a candidate's profile, **Submit a transcript for evaluation** → kind *First call (phone screen)* → paste the transcript, add **your initial read** → **Submit & evaluate the call**. You get an executive summary for the next round, “Already covered — don’t re-ask”, “Ask next”, strengths/concerns against the role profile, and a grade **A+ – F**. The grade shows on the pipeline row and the Jobs board.
+4. **If an evaluation fails**, the card says why (key rejected, model name, out of credit, unreadable reply) and every saved transcript has a **Run evaluation** / **Run evaluation again** button — fix the cause, click it, no re-pasting. Transcripts saved before the key was set can be evaluated the same way.
+5. **The instructions it follows** are plain English and editable: **Edit the evaluation instructions** under the transcript form, or **Settings → First-call evaluation instructions**. Any hiring manager can rewrite them; they save automatically and apply to the next run.
+6. Mock-pitch and interview transcripts still get the competency read with verbatim quotes. Everything is labelled advisory; evaluators score and the panel decides. Keep counsel in the loop — some jurisdictions regulate automated tools in hiring even when advisory.
 
 ## Part 9 — Jobs board, application links, reminders
 
@@ -107,9 +109,21 @@ With this, scheduling a combine creates the event on a Peak calendar, invites th
 - **Schools** — the list candidates choose from in Stage 2 (and staff use when adding candidates or jobs) lives in **Settings → Schools / properties**.
 - **Question bank** — every scenario and worst-move item shows the score behind each option and the reasoning in plain words; admins can change scores, flag labels, wording, and the rationale. Changes apply to everyone scored from then on; re-score existing reports from the profile.
 
+## Part 10 — Careers page and ad tracking
+
+- **peaksportscareers.com/careers** lists every job that is *posted* and open. Nothing is posted by default.
+- **Jobs tab → Job posting**: fill in location, compensation, type, and a plain-text description → **Save posting** → **Post on careers page**. Remove it the same way; the application link keeps working either way.
+- **Tracking links (one per channel)**: *Copy Facebook / Instagram ad link*, *Copy Teamworks posting link*, *Copy LinkedIn link*. Each is the job's application link tagged with `utm_source`, `utm_medium`, and this job's `utm_campaign`. In **Facebook Ads Manager** paste the Facebook link as the ad's destination URL (or add its parameters under *URL parameters*). Facebook's own `fbclid` is also recognised, so even an untagged Facebook link is attributed.
+- Every self-applied candidate shows **Applied via Facebook ad · campaign** (or Teamworks, LinkedIn, Careers page) on the pipeline row and profile. The Jobs tab shows the per-job breakdown and per-campaign counts; the Funnel tab shows the totals.
+- Candidates who arrive from the careers page keep their attribution through the job page and into the application (kept for the browser session).
+
+## Director of Sales assessment — V5
+
+Director of Sales candidates now take the **V5** bank (Peak's September 2026 redesign): 32 scenarios in six independent categories, one construct per item, industry-neutral, interleaved and answer-shuffled per candidate, followed by three **non-scored** working-style questions (feedback cadence, recognition, structure vs. autonomy) shown on the profile for onboarding only. The report labels V5 as a **pilot**: the six category scores are what matter; the overall and band are provisional composites, per the V5 guidance. Every answer in the trail carries V5's interpretation (Benchmark / Very strong / Effective / Reasonable / Weak / Material risk) and its “why it is graded this way”, plus each item's “why this question is asked” and “how to interpret a miss”. Exercise B for Director of Sales is V5's finalist work sample ($200K goal, $80K sold, 8 questions). Candidates who answered the previous Director of Sales bank keep scoring and reading against it (shown as *v4, retired*).
+
 ## Upgrading an existing database
 
-After uploading a new version of the code: Supabase → **SQL Editor** → paste the whole `supabase/schema.sql` → **Run** again. It adds new tables and columns without touching existing data (v3.2 adds jobs, pipeline stages, reminder tracking, transcript grades, and the public board / application functions, and attaches existing candidates to a job per role + school). Existing scouting reports show a **Re-score with evidence** button on the profile — click it once to attach the answer-level evidence to reports scored before this version.
+After uploading a new version of the code: Supabase → **SQL Editor** → paste the whole `supabase/schema.sql` → **Run** again. It adds new tables and columns without touching existing data (v3.3 adds job-posting fields, application-source tracking, and the public careers listing; v3.2 added jobs, pipeline stages, reminder tracking, transcript grades, and the public board / application functions). Existing scouting reports show a **Re-score with evidence** button on the profile — click it once to attach the answer-level evidence to reports scored before this version.
 
 ---
 

@@ -1,14 +1,23 @@
 // @ts-nocheck
-// POST /api/apply — a candidate applies through a job's public application link (no staff involvement).
-//   { applyToken, name, email, phone, loc, linkedin }
-// Creates the candidate on the job's pipeline (source 'self'), emails them their personal assessment link, and
-// returns that link so the browser can continue straight into the assessment. Re-applying with the same email
-// re-uses the existing record and refreshes the link instead of creating a duplicate.
+// POST /api/apply — a candidate applies through a job's public application link (careers page or a direct ad link).
+//   { applyToken, name, email, phone, loc, linkedin, utm }
+// Creates the candidate on the job's pipeline (source 'self'), records where they came from (utm_* / src / fbclid captured
+// by the browser), emails them their personal assessment link, and returns that link so the browser can continue straight
+// into the assessment. Re-applying with the same email re-uses the existing record and refreshes the link.
 import { admin, appUrl, readBody, send, sendEmail, emailShell, button, esc } from '../src/server/shared';
+import { sourceLabel } from '../src/data/defaults';
 
 const INVITE_DAYS = Number(process.env.INVITE_DAYS || 3);
 const P = (s) => '<p style="font-size:15px;line-height:1.6;color:#D5DED7">' + s + '</p>';
 const SMALL = (s) => '<p style="font-size:13px;color:#A7B5AB;line-height:1.6">' + s + '</p>';
+const UTM_OK = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'src', 'ref', 'fbclid', 'gclid', 'landing', 'referrer', 'at'];
+
+function cleanUtm(u) {
+  const out = {};
+  if (!u || typeof u !== 'object') return out;
+  UTM_OK.forEach(k => { if (u[k] != null && String(u[k]).trim()) out[k] = String(u[k]).trim().slice(0, k === 'landing' || k === 'referrer' ? 300 : 120); });
+  return out;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
@@ -23,15 +32,17 @@ export default async function handler(req, res) {
     if (name.length < 2) return send(res, 400, { error: 'Enter your full name.' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return send(res, 400, { error: 'Enter a valid email address.' });
     const phone = String(body.phone || '').trim().slice(0, 40), loc = String(body.loc || '').trim().slice(0, 80), linkedin = String(body.linkedin || '').trim().slice(0, 200);
+    const utm = cleanUtm(body.utm);
 
     const now = Date.now();
     const expires = new Date(now + INVITE_DAYS * 86400000).toISOString();
     let { data: cand } = await sb.from('candidates').select('*').eq('job_id', job.id).eq('archived', false).ilike('email', email).maybeSingle();
     let created = false;
     if (cand) {
-      await sb.from('candidates').update({ phone: phone || cand.phone, loc: loc || cand.loc, linkedin: linkedin || cand.linkedin, invite_sent_at: new Date(now).toISOString(), invite_expires_at: expires, resend_requested_at: null }).eq('id', cand.id);
+      const mergedUtm = Object.keys(cand.utm || {}).length ? cand.utm : utm; // first touch wins
+      await sb.from('candidates').update({ phone: phone || cand.phone, loc: loc || cand.loc, linkedin: linkedin || cand.linkedin, utm: mergedUtm, invite_sent_at: new Date(now).toISOString(), invite_expires_at: expires, resend_requested_at: null }).eq('id', cand.id);
     } else {
-      const ins = await sb.from('candidates').insert({ name, email, phone, loc, linkedin, role: job.title, program: job.program || '', job_id: job.id, source: 'self', track: 'assessment', invite_sent_at: new Date(now).toISOString(), invite_expires_at: expires }).select('*').single();
+      const ins = await sb.from('candidates').insert({ name, email, phone, loc, linkedin, role: job.title, program: job.program || '', job_id: job.id, source: 'self', track: 'assessment', utm, applied_at: new Date(now).toISOString(), invite_sent_at: new Date(now).toISOString(), invite_expires_at: expires }).select('*').single();
       if (ins.error) throw new Error(ins.error.message);
       cand = ins.data; created = true;
     }
@@ -51,7 +62,8 @@ export default async function handler(req, res) {
       });
       emailed = true;
     } catch (e) { emailed = false; }
-    await sb.from('audit').insert({ who: 'System', what: (created ? 'Applied via job link \u2014 ' : 'Re-applied via job link \u2014 ') + name + ' \u00b7 ' + job.title + (job.program ? ' \u00b7 ' + job.program : '') });
+    const via = sourceLabel({ source: 'self', utm: created ? utm : (cand.utm || utm) });
+    await sb.from('audit').insert({ who: 'System', what: (created ? 'Applied via ' : 'Re-applied via ') + via + ' \u2014 ' + name + ' \u00b7 ' + job.title + (job.program ? ' \u00b7 ' + job.program : '') + (utm.utm_campaign ? ' \u00b7 ' + utm.utm_campaign : '') });
     return send(res, 200, { ok: true, link, emailed, created });
   } catch (e) {
     return send(res, 500, { error: e && e.message ? e.message : 'Something went wrong.' });

@@ -5,6 +5,7 @@
 // Option score scale: 100 elite · 78 strong · 50 neutral · 28 mild concern · 6 red flag.
 
 import { RATIONALE, SCALE_NOTE } from './rationale';
+import { SENIOR_V5 } from './bank-dos-v5';
 
 const E = 100, S = 78, N = 50, M = 28, R = 6;
 
@@ -179,9 +180,12 @@ const ENTRY = {
 
 /* ───────────────────── SENIOR SALES / REVENUE LEADER ───────────────────── */
 
-const SENIOR = {
-  id: "senior",
-  name: "Director of Sales",
+// Retired September 2026 in favour of V5 (bank-dos-v5.ts). Kept so candidates who answered it still score and their reports still read.
+const SENIOR_V4 = {
+  id: "senior_v4",
+  legacyOf: "senior",
+  hidden: true,
+  name: "Director of Sales (v4, retired)",
   tag: "Owns a number for a property or market",
   blurb: "High-expectation new business. Evidence of production and repeatable sales ability, not years served.",
   experienceWeighting: "High — but weighted to evidence of production. Ten mediocre years does not outrank five exceptional ones.",
@@ -477,10 +481,37 @@ const SERVICE = {
   },
 };
 
-export const ROLES = { entry: ENTRY, senior: SENIOR, service: SERVICE };
-export const ROLE_LIST = [ENTRY, SENIOR, SERVICE];
+export const ROLES = { entry: ENTRY, senior: SENIOR_V5, service: SERVICE, senior_v4: SENIOR_V4 };
+export const ROLE_LIST = [ENTRY, SENIOR_V5, SERVICE];
 
 export const DEFAULT_THRESHOLDS = { strongPass: 85, pass: 72, flag: 58, fail: 42 };
+
+// Saved settings are merged onto the profile's current competencies, so a renamed or restructured profile never scores against stale keys.
+export function normalizeSettings(role, settings) {
+  const d = defaultSettings(role);
+  if (!settings || typeof settings !== "object") return d;
+  const pick = (k, coerce) => Object.fromEntries(Object.keys(role.competencies).map(c => { const v = settings[k] && settings[k][c]; return [c, v == null ? d[k][c] : coerce(v)]; }));
+  return { thresholds: { ...d.thresholds, ...(settings.thresholds || {}) }, weights: pick("weights", Number), floors: pick("floors", Number), critical: pick("critical", Boolean), scored: pick("scored", Boolean) };
+}
+
+// Which profile a set of saved answers belongs to: the role's current profile, or the retired one it replaced.
+export function profileIdForAnswers(profId, answers) {
+  const keys = Object.keys(answers || {});
+  const cur = ROLES[profId];
+  if (!cur || !keys.length) return profId;
+  const has = r => { const ids = new Set([...scoredItems(r), ...(r.insights || [])].map(q => q.id)); return keys.some(k => ids.has(k)); };
+  if (has(cur)) return profId;
+  const legacy = Object.values(ROLES).find(r => r.legacyOf === profId && has(r));
+  return legacy ? legacy.id : profId;
+}
+// The profile a stored report was scored against (reports carry profileId; older ones are matched by their competency keys).
+export function profileForReport(report, fallbackId) {
+  const id = (report && report.profileId) || fallbackId;
+  const cur = ROLES[id] || ROLES[fallbackId] || ROLES.entry;
+  const keys = ((report && report.comps) || []).map(c => c.key);
+  if (!keys.length || keys.some(k => cur.competencies[k])) return cur;
+  return Object.values(ROLES).find(r => r.legacyOf === cur.id && keys.some(k => r.competencies[k])) || cur;
+}
 
 export const defaultSettings = role => ({
   thresholds: { ...DEFAULT_THRESHOLDS },
@@ -506,14 +537,26 @@ export const scoredItems = role => [...role.likert, ...role.pairs, ...role.scena
 
 // Ordered candidate flow: formats are interleaved so the same competency is measured
 // from different angles at different points, and patterns are harder to game.
-export function flowFor(role) {
-  const L = role.likert.slice(), S = role.scenarios.slice(), P = role.pairs.slice(), W = role.worst.slice();
+// `seed` (a number derived from the candidate's link) keeps one candidate's order stable across sessions while varying it between candidates.
+export function flowFor(role, seed) {
   const out = [];
-  const take = (a, n) => { for (let i = 0; i < n && a.length; i++) out.push(a.shift()); };
-  take(L, 3); take(S, 3); take(P, 2); take(W, 1);
-  take(S, 3); take(L, 3); take(P, 2); take(W, 1);
-  take(S, 3); take(L, 3); take(P, 2); take(W, 1);
-  take(S, 99); take(L, 99); take(P, 99); take(W, 99);
+  if (role.interleave) {
+    // Scenario-only banks (V5): shuffle within each category, then deal round-robin across categories so neighbours never share one.
+    const s0 = (Math.abs(Number(seed)) || 7) % 233280;
+    const byComp = {};
+    role.scenarios.forEach(q => { (byComp[q.comp] = byComp[q.comp] || []).push(q); });
+    const groups = shuffled(Object.keys(byComp).map((k, gi) => shuffled(byComp[k], s0 + gi * 101 + 3)), s0 + 977);
+    let left = true;
+    while (left) { left = false; groups.forEach(g => { if (g.length) { out.push(g.shift()); left = true; } }); }
+  } else {
+    const L = role.likert.slice(), S = role.scenarios.slice(), P = role.pairs.slice(), W = role.worst.slice();
+    const take = (a, n) => { for (let i = 0; i < n && a.length; i++) out.push(a.shift()); };
+    take(L, 3); take(S, 3); take(P, 2); take(W, 1);
+    take(S, 3); take(L, 3); take(P, 2); take(W, 1);
+    take(S, 3); take(L, 3); take(P, 2); take(W, 1);
+    take(S, 99); take(L, 99); take(P, 99); take(W, 99);
+  }
+  (role.insights || []).forEach(q => out.push(q)); // non-scored manager insights always close the assessment
   return out;
 }
 
@@ -542,7 +585,7 @@ export function applyEdits(role, edits) {
       const eo = (e.opts || [])[i] || {};
       const num = Number(eo.score);
       const score = eo.score !== undefined && eo.score !== null && eo.score !== "" && !isNaN(num) ? Math.max(0, Math.min(100, Math.round(num))) : o.score;
-      return { ...o, text: eo.text ? eo.text : o.text, score, flag: eo.flag !== undefined ? (eo.flag || null) : o.flag, positive: eo.positive !== undefined ? (eo.positive || null) : o.positive };
+      return { ...o, text: eo.text ? eo.text : o.text, score, interp: score === o.score ? o.interp : null, flag: eo.flag !== undefined ? (eo.flag || null) : o.flag, positive: eo.positive !== undefined ? (eo.positive || null) : o.positive };
     });
     return { ...q, text: e.text || q.text, why: e.why || q.why, opts, edited: true };
   };
@@ -570,8 +613,8 @@ export function itemEvidence(role, answers) {
     const pick = answers[q.id]; if (pick == null) return;
     const o = q.opts[pick]; if (!o) return;
     const best = q.opts.slice().sort((x, y) => y.score - x.score)[0];
-    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, flag: x.flag || "", positive: x.positive || "" }));
-    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, q: q.text, answer: o.text, score: o.score, signal: SIGNAL(o.score), best: best.i === o.i ? "" : best.text, flag: o.flag || "", positive: o.positive || "", why: whyFor(role, q), options, edited: !!q.edited });
+    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, flag: x.flag || "", positive: x.positive || "", interp: x.interp || "", reason: x.reason || "", signal: x.interp || SIGNAL(x.score) }));
+    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, title: q.title || "", construct: q.construct || "", q: q.text, answer: o.text, score: o.score, signal: o.interp || SIGNAL(o.score), reason: o.reason || "", best: best.i === o.i ? "" : best.text, flag: o.flag || "", positive: o.positive || "", why: whyFor(role, q), miss: q.miss || "", options, edited: !!q.edited });
   });
   role.worst.forEach(q => {
     const pick = answers[q.id]; if (pick == null) return;
@@ -584,7 +627,7 @@ export function itemEvidence(role, answers) {
 }
 
 export function score(role, answers, settings) {
-  const st = settings || defaultSettings(role);
+  const st = normalizeSettings(role, settings);
   const items = itemEvidence(role, answers);
   const byId = Object.fromEntries(items.map(it => [it.id, it]));
   const buckets = {};
@@ -656,7 +699,9 @@ export function score(role, answers, settings) {
   const overall = Math.round(active.reduce((a, c) => a + c.score * c.weight, 0) / wsum);
 
   // Evidence helpers: the weakest answers behind a competency, and the self-ratings vs. scenario choices behind a consistency note.
-  const brief = it => ({ id: it.id, kind: it.kind, q: it.q, answer: it.answer, score: it.score, signal: it.signal, best: it.best || "", why: it.why || "" });
+  const brief = it => ({ id: it.id, kind: it.kind, q: it.q, answer: it.answer, score: it.score, signal: it.signal, best: it.best || "", why: it.why || "", reason: it.reason || "" });
+  // Non-scored manager insights (V5): recorded for onboarding, never part of any score.
+  const insights = (role.insights || []).map(q => { const pick = answers[q.id]; const o = pick != null ? q.opts[pick] : null; return o ? { id: q.id, title: q.title || "", q: q.text, answer: o.text } : null; }).filter(Boolean);
   const weakest = (comp, n) => items.filter(it => it.comp === comp).sort((a, b) => a.score - b.score).slice(0, n).map(brief);
 
   // Response-consistency checks — never phrased as an accusation.
@@ -738,7 +783,9 @@ export function score(role, answers, settings) {
     scenario: { avg: scenAvg, answered: scen.length, total: role.scenarios.length, elite: eliteCount, weak: weakCount },
     references: role.behavioral,
     items,
-    engine: 2,
+    insights,
+    pilot: !!role.pilot, pilotNote: role.pilotNote || "", version: role.version || "",
+    engine: 3,
   };
 }
 
@@ -772,4 +819,4 @@ export function demoAnswers(role, profile) {
   return out;
 }
 
-export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, LIKERT_LABELS, RATIONALE, SCALE_NOTE, defaultSettings, shuffled, scoredItems, flowFor, itemEvidence, whyFor, applyEdits, score, demoAnswers };
+export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, LIKERT_LABELS, RATIONALE, SCALE_NOTE, defaultSettings, normalizeSettings, profileIdForAnswers, profileForReport, shuffled, scoredItems, flowFor, itemEvidence, whyFor, applyEdits, score, demoAnswers };

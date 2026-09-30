@@ -6,10 +6,10 @@ import { Template } from './template/Template';
 import { PEAK_DATA } from './data/seed';
 import { PEAK_BANK } from './data/bank';
 import { LIVE_ENABLED, LiveStore, sb, fmtDate, fmtT, whenTxt, TZ_OPTIONS, TZ_SHORT } from './data/live';
-import { DEFAULT_SCHOOLS, DEFAULT_TA_STAGES, DEFAULT_CALL_PROMPT, FIRST_CALL_KIND, GRADE_COLOR } from './data/defaults';
+import { DEFAULT_SCHOOLS, DEFAULT_TA_STAGES, DEFAULT_CALL_PROMPT, FIRST_CALL_KIND, GRADE_COLOR, UTM_KEYS, CHANNEL_LINKS, slugify, sourceLabel } from './data/defaults';
 
 const STORAGE_KEY = 'peak-sales-combine-v3';
-const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr', 'resumeMsg', 'caseMsg', 'pub', 'schoolsDraft', 'stagesDraft', 'remindMsg']; // never persisted
+const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr', 'resumeMsg', 'caseMsg', 'pub', 'schoolsDraft', 'stagesDraft', 'remindMsg', 'posting', 'postMsg']; // never persisted
 const UI_KEYS = ['blind', 'weightsRole', 'vPeriod']; // the only local state kept between visits in live mode
 const CAND_KEYS = ['done', 'ack', 'challenge', 'app', 'ev', 'bkIdx', 'bkAns', 'bkIntroSeen', 'caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'infoDone']; // candidate progress synced to the database
 const COMBINE_KEYS = ['caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'done']; // the subset a combine link may change
@@ -37,13 +37,13 @@ function saveState(s: any) {
 }
 
 export class PeakCombine extends React.Component<any, any> {
-  _t: any; live: any; token: any; combineToken: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any; publicKind: any; publicToken: any;
+  _t: any; live: any; token: any; combineToken: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any; publicKind: any; publicToken: any; utm: any;
   constructor(props: any) {
     super(props);
     const saved = loadState();
     if (saved) this.state = {...this.state, ...saved};
     this.live = LIVE_ENABLED ? new LiveStore() : null;
-    this.token = null; this.combineToken = null; this.publicKind = null; this.publicToken = null; this.candInfo = null; this.hydrating = false; this.pendingPatch = null; this.saveChain = null; this.settingsDirty = {}; this.pendingWrites = 0; this._entering = false; this._pwSetup = false;
+    this.token = null; this.combineToken = null; this.publicKind = null; this.publicToken = null; this.utm = {}; this.candInfo = null; this.hydrating = false; this.pendingPatch = null; this.saveChain = null; this.settingsDirty = {}; this.pendingWrites = 0; this._entering = false; this._pwSetup = false;
   }
   state = {
     mode: null, user: null, role: null, invite: 'valid', viewAs: null, resent: false,
@@ -70,7 +70,7 @@ export class PeakCombine extends React.Component<any, any> {
     weightsRole: DEFAULT_ROLE, weightsByRole: null,
     bankItemId: null, bankDraft: null, bankEdits: {}, bankSaved: '',
     schools: null, taStages: null, callEvalPrompt: null, schoolsDraft: null, stagesDraft: null, promptOpen: false, remindMsg: '',
-    board: {job:'', newRole:DEFAULT_ROLE, newProgram:'', newCustom:'', open:false, msg:''}, taLocal: {},
+    board: {job:'', newRole:DEFAULT_ROLE, newProgram:'', newCustom:'', open:false, msg:''}, taLocal: {}, posting: null, postMsg: '',
     pub: {status:'loading', data:null, form:{name:'',email:'',phone:'',loc:'',linkedin:'',consent:false}, msg:'', busy:false, link:''},
     vPeriod: 'd30', retention: '24 months',
     // live mode
@@ -108,8 +108,24 @@ export class PeakCombine extends React.Component<any, any> {
     const V = this.live.viewData(S);
     return {...S, candidates: V.candidates, users: V.users, decisions: V.decisions, sessions: V.sessions, accoms: V.accoms, applications: V.applications, funnel: V.funnel, hires: V.hires, audit: V.audit, roles: V.roles, jobs: V.jobs, invite: this.candInfo || S.invite};
   }
+  // Where a visitor came from (Facebook appends fbclid; ads should carry utm_source/utm_medium/utm_campaign). Kept for the
+  // session so the careers page → job page → application keeps the attribution, and sent with the application.
+  captureUtm(q) {
+    const found = {};
+    UTM_KEYS.forEach(k => { const v = q.get(k); if (v) found[k] = String(v).slice(0, 120); });
+    let saved = {};
+    try { saved = JSON.parse(sessionStorage.getItem('peak-utm') || '{}') || {}; } catch (e) { saved = {}; }
+    if (Object.keys(found).length && !saved.landing) saved = {...saved, ...found, landing: window.location.href.slice(0, 300), referrer: (document.referrer || '').slice(0, 300), at: new Date().toISOString()};
+    else if (Object.keys(found).length) saved = {...saved, ...found};
+    else if (!saved.landing && document.referrer) saved = {...saved, referrer: document.referrer.slice(0, 300), landing: window.location.href.slice(0, 300), at: new Date().toISOString()};
+    if (Object.keys(saved).length) { try { sessionStorage.setItem('peak-utm', JSON.stringify(saved)); } catch (e) {} }
+    this.utm = saved;
+  }
+  utmQuery() { const q = new URLSearchParams(); UTM_KEYS.forEach(k => { if (this.utm && this.utm[k]) q.set(k, this.utm[k]); }); const s = q.toString(); return s ? '&' + s : ''; }
   initLive() {
     const q = new URLSearchParams(window.location.search);
+    this.captureUtm(q);
+    if (q.has('careers') || /^\/careers\/?$/i.test(window.location.pathname)) { this.publicKind = 'careers'; this.setState({mode:'public'}); this.openCareers(); return; }
     const token = q.get('invite');
     if (token) { this.token = token; this.setState({mode:'candidate', invite:'loading', viewAs:null}); this.openCandidate(token); return; }
     const ctoken = q.get('combine');
@@ -395,10 +411,14 @@ export class PeakCombine extends React.Component<any, any> {
     if (f.name.trim().length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()) || !f.consent) { this.setPub({msg:'Enter your name and a valid email, and tick the consent box.'}); return; }
     this.setPub({busy:true, msg:''});
     try {
-      const r = await this.live.applySubmit({applyToken:this.publicToken, name:f.name.trim(), email:f.email.trim(), phone:f.phone.trim(), loc:f.loc.trim(), linkedin:f.linkedin.trim()});
+      const r = await this.live.applySubmit({applyToken:this.publicToken, name:f.name.trim(), email:f.email.trim(), phone:f.phone.trim(), loc:f.loc.trim(), linkedin:f.linkedin.trim(), utm:this.utm || {}});
       this.setPub({busy:false, status:'done', link:r.link, msg: r.emailed ? 'We also emailed the link to ' + f.email.trim() + ' so you can come back later.' : 'Save this link if you need to come back later.'});
       setTimeout(() => { window.location.href = r.link; }, 2200);
     } catch (e) { this.setPub({busy:false, msg:'Could not submit: ' + ((e && e.message) || e)}); }
+  }
+  async openCareers() {
+    try { const r = await this.live.careersOpen(); this.setPub({status:'ok', data:r || {jobs:[]}}); }
+    catch (e) { this.setPub({status:'invalid', msg:(e && e.message) || ''}); }
   }
   async openBoard(token) {
     try { const r = await this.live.boardOpen(token); if (!r || r.status !== 'ok') { this.setPub({status:'invalid'}); return; } this.setPub({status:'ok', data:r}); }
@@ -420,6 +440,24 @@ export class PeakCombine extends React.Component<any, any> {
     this.setState({busy:'job'});
     try { const row = await this.live.findOrCreateJob(b.newRole, program); await this.live.refresh(); this.setState({board:{...this.state.board, job:row.id, open:false, newCustom:'', newProgram:'', msg:''}}); }
     catch (e) { this.setState({board:{...this.state.board, msg:'Could not create the job: ' + ((e && e.message) || e)}}); }
+    this.setState({busy:''});
+  }
+  async savePosting(job) {
+    const d = this.state.posting; if (!d || !job || !LIVE_ENABLED) return;
+    this.setState({busy:'post'});
+    const r = await this.write(() => this.live.updateJob(job.id, {description:(d.description || '').slice(0, 6000), location:(d.location || '').slice(0, 120), comp:(d.comp || '').slice(0, 120), employment_type:(d.employment_type || 'Full-time').slice(0, 40)}), 'board');
+    this.setState({busy:'', posting: r.ok ? null : d, postMsg: r.ok ? 'Posting saved.' : ''});
+  }
+  async togglePosted(job) {
+    if (!job || !LIVE_ENABLED) return;
+    const on = !job.posted;
+    const r = await this.write(() => this.live.updateJob(job.id, {posted:on, posted_at: on ? new Date().toISOString() : job.postedAt}), 'board');
+    if (r.ok) { this.setState({postMsg: on ? 'Listed on the careers page.' : 'Removed from the careers page (the application link still works).'}); this.live.audit((on ? 'Posted job on careers page \u2014 ' : 'Unlisted job from careers page \u2014 ') + job.label); }
+  }
+  async rerunTranscript(id) {
+    this.setState({busy:'tr:' + id});
+    try { const r = await this.live.reevaluateTranscript(id); await this.live.refresh(); this.setState({tr:{...this.state.tr, msg: r.status === 'done' ? (r.grade ? 'Re-evaluated \u00b7 graded ' + r.grade + '.' : 'Re-evaluated.') : r.status === 'off' ? 'The AI key is still not set in Vercel (ANTHROPIC_API_KEY) \u2014 nothing to evaluate with.' : 'The evaluation failed again: ' + ((r.review && r.review.error) || 'unknown error')}, trShow:{...this.state.trShow, [id]:true}}); }
+    catch (e) { this.setState({tr:{...this.state.tr, msg:'Could not re-run: ' + ((e && e.message) || e)}}); }
     this.setState({busy:''});
   }
   async toggleJobFlag(job, key, val) { if (!LIVE_ENABLED) return; await this.write(() => this.live.updateJob(job.id, {[key]: val}), 'board'); }
@@ -486,6 +524,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.setLoginPw = e => this.setState({login:{...this.state.login, pw:e.target.value, err:''}});
     v.signIn = () => { const em = this.state.login.email.trim().toLowerCase(); const u = users.find(x => x.email.toLowerCase() === em); if (!u) this.setState({login:{...this.state.login, err: em ? 'No staff account for that email. Candidates: use the link in your invitation email.' : 'Enter your work email.'}}); else if (this.state.deactivated[u.id]) this.setState({login:{...this.state.login, err:'This account has been deactivated. Contact the admin.'}}); else this.signInAs(u.id); };
     v.demoUsers = users.map(u => ({name: u.name + ' · ' + u.title, rolesTxt: u.roles.map(roleLabel).join(' + '), go: () => this.signInAs(u.id)}));
+    v.careersLink = LIVE_ENABLED ? (window.location.pathname === '/' ? '/careers' : window.location.pathname + '?live=1&careers=1') : '';
     v.openInvite = () => this.setState({mode:'candidate', invite:'valid', viewAs:null});
     v.openExpired = () => this.setState({mode:'candidate', invite:'expired', resent:false, viewAs:null});
     v.notResent = !st.resent; v.resent = st.resent; v.resend = () => this.setState({resent:true});
@@ -629,24 +668,27 @@ export class PeakCombine extends React.Component<any, any> {
     const candRole = vaCand ? vaCand.role : inv.role;
     const candEditsAll = (LIVE_ENABLED && st.mode === 'candidate') ? ((this.candInfo && this.candInfo.bankEdits) || {}) : (st.bankEdits || {});
     const editsFor = pid => { const e = (candEditsAll || {})[pid]; return (e && typeof e === 'object' && !Array.isArray(e)) ? e : null; };
-    const bkProf = B ? B.applyEdits(B.ROLES[profIdFor(candRole)], editsFor(profIdFor(candRole))) : null;
-    const bkFlow = bkProf ? B.flowFor(bkProf) : [];
+    const bkPidC = B ? B.profileIdForAnswers(profIdFor(candRole), st.bkAns) : profIdFor(candRole);
+    const bkProf = B ? B.applyEdits(B.ROLES[bkPidC] || B.ROLES.entry, editsFor(bkPidC)) : null;
+    const flowSeed = (() => { let h = 0; for (const ch of String(this.token || (vaCand && vaCand.id) || 'demo')) h = (h * 31 + ch.charCodeAt(0)) % 233280; return h; })();
+    const bkFlow = bkProf ? B.flowFor(bkProf, flowSeed) : [];
     const bkTotal = bkFlow.length || 1;
     const bkI = Math.min(st.bkIdx, bkTotal - 1);
     const bkItem = bkFlow[bkI] || {};
     const bkCur = st.bkAns[bkItem.id];
     v.bkNum = bkI + 1; v.bkTotal = bkTotal; v.bkPct = Math.round(bkI / bkTotal * 100) + '%';
-    v.bkKindLabel = ({likert:'How true is this of you?', pair:'Both are good. Which is more you?', scenario:'What would you actually do?', worst:'Which is the worst move?'})[bkItem.kind] || 'Sales decisions';
+    v.bkKindLabel = ({likert:'How true is this of you?', pair:'Both are good. Which is more you?', scenario:'What would you actually do?', worst:'Which is the worst move?', insight:'How do you work best?'})[bkItem.kind] || 'Sales decisions';
+    v.bkNotScored = bkItem.kind === 'insight';
     v.bkHasText = bkItem.kind !== 'pair' && !!bkItem.text; v.bkText = bkItem.text || '';
-    v.bkIsLikert = bkItem.kind === 'likert'; v.bkIsPair = bkItem.kind === 'pair'; v.bkIsChoice = bkItem.kind === 'scenario' || bkItem.kind === 'worst';
+    v.bkIsLikert = bkItem.kind === 'likert'; v.bkIsPair = bkItem.kind === 'pair'; v.bkIsChoice = bkItem.kind === 'scenario' || bkItem.kind === 'worst' || bkItem.kind === 'insight';
     const bkPick = val => { const a = {...this.state.bkAns, [bkItem.id]: val}; const nx = bkI + 1; if (nx >= bkTotal) this.setState({bkAns:a, bkIdx:bkTotal, done:{...this.state.done, s3:true, s4:true}, cview:'finished'}); else this.setState({bkAns:a, bkIdx:nx}); };
     const selSty = on => ({bg: on ? 'rgba(16,185,129,.16)' : '#0B120E', border: on ? 'rgba(16,185,129,.6)' : 'rgba(160,190,170,.2)', fg: on ? GL : '#D5DED7'});
     v.bkScale = ['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'].map((label, k) => ({label, ...selSty(bkCur === k + 1), on: () => bkPick(k + 1)}));
     v.bkPair = bkItem.kind === 'pair' ? [['a', bkItem.a[2]], ['b', bkItem.b[2]]].map(([side, text]) => ({text, ...selSty(bkCur === side), on: () => bkPick(side)})) : [];
-    v.bkOpts = v.bkIsChoice ? B.shuffled(bkItem.opts, bkI * 7 + 13).map((o, k) => ({letter:'ABCD'[k], text:o.text, ...selSty(bkCur === o.i), on: () => bkPick(o.i)})) : [];
+    v.bkOpts = v.bkIsChoice ? (bkItem.kind === 'insight' ? bkItem.opts : B.shuffled(bkItem.opts, bkI * 7 + 13)).map((o, k) => ({letter:'ABCD'[k], text:o.text, ...selSty(bkCur === o.i), on: () => bkPick(o.i)})) : [];
     v.bkCanBack = bkI > 0 && !done.s3; v.bkBack = () => this.setState({bkIdx: Math.max(0, this.state.bkIdx - 1)});
     // an intro screen the first time each question format appears, so the switch between formats is explicit
-    const kindIntro = {likert:{title:'Self-assessment', kicker:'How true is this of you?', body:'Rate each statement on a five-point scale. Answer for how you actually operate, not how you would like to. Your ratings are read alongside your scenario choices, so honesty is the only strategy that works.', noun:'statements'}, pair:{title:'Forced choice', kicker:'Both are good. Which is more you?', body:'Two legitimate options each time \u2014 neither is wrong. Pick the one that is more true of you.', noun:'pairs'}, scenario:{title:'Scenarios', kicker:'What would you actually do?', body:'A real situation from the job and four responses. Choose the one closest to what you would genuinely do \u2014 not the textbook answer.', noun:'scenarios'}, worst:{title:'Worst move', kicker:'Which is the worst move?', body:'This part flips the question. Of the four actions, pick the ONE you would never take \u2014 the most damaging move in that situation.', noun:'situations'}};
+    const kindIntro = {likert:{title:'Self-assessment', kicker:'How true is this of you?', body:'Rate each statement on a five-point scale. Answer for how you actually operate, not how you would like to. Your ratings are read alongside your scenario choices, so honesty is the only strategy that works.', noun:'statements'}, pair:{title:'Forced choice', kicker:'Both are good. Which is more you?', body:'Two legitimate options each time \u2014 neither is wrong. Pick the one that is more true of you.', noun:'pairs'}, scenario:{title:'Scenarios', kicker:'What would you actually do?', body:'A real situation from the job and four responses. Choose the one closest to what you would genuinely do \u2014 not the textbook answer.', noun:'scenarios'}, worst:{title:'Worst move', kicker:'Which is the worst move?', body:'This part flips the question. Of the four actions, pick the ONE you would never take \u2014 the most damaging move in that situation.', noun:'situations'}, insight:{title:'Working style', kicker:'Three quick questions about how you like to be managed.', body:'These are not scored and never affect the hiring decision. They help your future manager set up onboarding, feedback, and check-ins the way you work best.', noun:'questions'}};
     const groupStart = bkI === 0 || (bkFlow[bkI - 1] || {}).kind !== bkItem.kind;
     let runLen = 0; for (let k = bkI; k < bkFlow.length && bkFlow[k].kind === bkItem.kind; k++) runLen++;
     const ki = kindIntro[bkItem.kind] || kindIntro.scenario;
@@ -683,8 +725,11 @@ export class PeakCombine extends React.Component<any, any> {
     v.caseModes = ['Written','Slides upload','Video'].map(m => ({label:m, on:() => this.setState({caseMode:m}), bg: st.caseMode===m ? 'rgba(16,185,129,.14)' : 'transparent', fg: st.caseMode===m ? GL : '#8FA396'}));
     v.caseWritten = st.caseMode==='Written';
     v.caseUpload = st.caseMode!=='Written';
-    v.caseItems = D.caseQs.map((q, i) => ({num: String(i+1).padStart(2,'0'), q, val: st.caseAns[i], set: e => { const a=[...this.state.caseAns]; a[i]=e.target.value; this.setState({caseAns:a}); }}));
-    const s5bOk = st.caseMode==='Written' ? st.caseAns.every(x => x.trim().length > 10) : !!caseFile;
+    const caseDef = ((D.caseByProfile || {})[profIdFor(candRole)]) || ((D.caseByProfile || {}).entry) || {};
+    const caseQs = caseDef.qs || D.caseQs || [];
+    v.caseTitle = caseDef.title || 'Build momentum from almost nothing.'; v.caseIntro = caseDef.intro || ''; v.caseFacts = caseDef.facts || []; v.caseSummary = caseDef.summary || '';
+    v.caseItems = caseQs.map((q, i) => ({num: String(i+1).padStart(2,'0'), q, val: st.caseAns[i] || '', set: e => { const a=[...this.state.caseAns]; a[i]=e.target.value; this.setState({caseAns:a}); }}));
+    const s5bOk = st.caseMode==='Written' ? caseQs.every((q, i) => (st.caseAns[i] || '').trim().length > 10) : !!caseFile;
     v.s5bBlocked = !s5bOk || done.s5b;
     v.s5bSubmitBg = (s5bOk && !done.s5b) ? G : '#20302680';
     v.submitS5b = () => { if (s5bOk && !done.s5b) this.markDone('s5b', {cview:'s5'}); };
@@ -809,6 +854,10 @@ export class PeakCombine extends React.Component<any, any> {
     const total = (D.funnel[0]||{}).n || 1;
     v.funnelRows = D.funnel.map((f, i) => ({label:f.label, n:f.n, pct: Math.round(f.n/total*100)+'%', conv: i===0 ? '100%' : D.funnel[i-1].n ? Math.round(f.n/D.funnel[i-1].n*100)+'% of prior' : '\u2014'}));
     v.roleCards = D.roles;
+    const srcCount = list => { const m = {}; list.forEach(c => { const k = c.sourceLabel || sourceLabel(c); m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([label, n]) => ({label, n, pct: list.length ? Math.round(n / list.length * 100) + '%' : '0%'})); };
+    v.sourceRows = LIVE_ENABLED ? srcCount(D.candidates) : []; v.hasSources = v.sourceRows.length > 0;
+    const applied = D.candidates.filter(c => c.source === 'self');
+    v.sourceNote = LIVE_ENABLED ? (applied.length + ' of ' + D.candidates.length + ' applied on their own through a job link; the rest were added by staff.') : '';
     v.blind = st.blind; v.toggleBlind = () => this.setState({blind:!st.blind});
     v.blindState = st.blind ? 'on' : 'off'; v.blindColor = st.blind ? GL : '#8FA396';
     const dispName = c => st.blind ? c.anon : c.name;
@@ -845,11 +894,11 @@ export class PeakCombine extends React.Component<any, any> {
     v.pReadiness = p.readiness ? p.readiness.toFixed(1) : '\u2014';
     v.pHasData = !!p.comp; v.pNoData = !p.comp; v.pStageLabel = p.stageLabel || '';
     const bsAll = st.bankSettings || (B ? Object.fromEntries(B.ROLE_LIST.map(r => [r.id, B.defaultSettings(r)])) : {});
-    const reportFor = c => { if (LIVE_ENABLED) return (B && c && c.report) ? {prof: B.ROLES[c.report.profileId] || B.ROLES[profIdFor(c.role)], res: c.report} : null; if (!B || !c || c.sjt == null) return null; const prof = B.ROLES[profIdFor(c.role)]; const tier = c.sjt >= 80 ? 'strong' : c.sjt >= 62 ? 'mixed' : 'weak'; return {prof, res: B.score(prof, B.demoAnswers(prof, tier), bsAll[prof.id] || B.defaultSettings(prof))}; };
+    const reportFor = c => { if (LIVE_ENABLED) return (B && c && c.report) ? {prof: B.profileForReport(c.report, profIdFor(c.role)), res: c.report} : null; if (!B || !c || c.sjt == null) return null; const prof = B.ROLES[profIdFor(c.role)]; const tier = c.sjt >= 80 ? 'strong' : c.sjt >= 62 ? 'mixed' : 'weak'; return {prof, res: B.score(prof, B.demoAnswers(prof, tier), bsAll[prof.id] || B.defaultSettings(prof))}; };
     const rp = reportFor(p);
     const sigColor = s => s >= 95 ? G : s >= 70 ? GL : s >= 45 ? '#A7B5AB' : s >= 20 ? AMB : RED;
     const kindLabel = k => ({likert:'Self-rating', pair:'Forced choice', scenario:'Scenario', worst:'Worst move'})[k] || k;
-    const evRow = it => ({q:it.q, answer:it.answer, signal:it.signal, score:it.score, best:it.best || '', color: sigColor(it.score), kind: kindLabel(it.kind), why: it.why || '', options: (it.options || []).map(o => ({text:o.text, score:o.score, signal:o.signal, chosen:!!o.chosen, flag:o.flag || '', positive:o.positive || '', color: sigColor(o.score), weight: o.chosen ? '800' : '400'}))});
+    const evRow = it => ({q:it.q, title:it.title || '', answer:it.answer, signal:it.signal, score:it.score, best:it.best || '', color: sigColor(it.score), kind: kindLabel(it.kind), why: it.why || '', miss: it.miss || '', reason: it.reason || '', options: (it.options || []).map(o => ({text:o.text, score:o.score, signal:o.signal, reason:o.reason || '', chosen:!!o.chosen, flag:o.flag || '', positive:o.positive || '', color: sigColor(o.score), weight: o.chosen ? '800' : '400'}))});
     v.rpScaleNote = B ? B.SCALE_NOTE : '';
     v.pHasReport = !!rp;
     const bandColor = b => b === 'Strong match' ? G : b === 'Meets profile' ? GL : b === 'Validate in interview' ? AMB : b === 'Below profile' ? '#F0A070' : RED;
@@ -857,7 +906,8 @@ export class PeakCombine extends React.Component<any, any> {
     if (rp) {
       const r = rp.res;
       v.rpOverall = r.overall; v.rpBand = r.band; v.rpColor = bandColor(r.band); v.rpNote = r.bandNote;
-      v.rpProfile = rp.prof.name + ' profile · ' + rp.prof.tag; v.rpProfName = rp.prof.name;
+      v.rpProfile = rp.prof.name + (rp.prof.version ? ' ' + rp.prof.version : '') + ' profile · ' + rp.prof.tag; v.rpProfName = rp.prof.name;
+      v.rpPilot = !!r.pilot; v.rpPilotNote = r.pilotNote || ''; v.rpInsights = (r.insights || []).map(x => ({title:x.title, q:x.q, answer:x.answer})); v.rpHasInsights = !!(r.insights && r.insights.length);
       v.rpScen = r.scenario.answered + '/' + r.scenario.total + ' scenarios · avg ' + r.scenario.avg + ' · ' + r.scenario.elite + ' elite · ' + r.scenario.weak + ' weak';
       v.rpComps = r.comps.map(c => { const col = c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? '#E9D9B0' : AMB; return {name:c.name, meta:(c.critical ? '★ ' : '') + c.weight + '%' + (c.breach ? ' · below floor ' + c.floor : ''), scoreTxt: c.scored ? String(c.score) : 'off', color: c.scored ? col : '#5C6B61', pct: (c.scored ? c.score : 0) + '%', floorPct: c.floor + '%'}; });
       v.rpFlags = r.redFlags.map(f => ({sev:f.severity, label:f.label, context:f.context, chosen:f.chosen || '', better:f.better || '', why:f.why || '', comp:(rp.prof.competencies[f.comp] || {}).name || f.comp, ...sevSty(f.severity)}));
@@ -874,7 +924,7 @@ export class PeakCombine extends React.Component<any, any> {
       v.rpItemCount = (r.items || []).length;
       v.rpItemsOpen = !!st.rpItemsOpen; v.toggleItems = () => this.setState({rpItemsOpen: !this.state.rpItemsOpen});
       v.rpItemsBtn = st.rpItemsOpen ? 'Hide the answer trail' : 'Show every answer (' + v.rpItemCount + ')';
-    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; v.rpItemGroups = []; v.rpHasEvidence = false; v.rpItemsOpen = false; }
+    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; v.rpItemGroups = []; v.rpHasEvidence = false; v.rpItemsOpen = false; v.rpPilot = false; v.rpInsights = []; v.rpHasInsights = false; }
     const lvColors = {High:[GL,'rgba(16,185,129,.12)'], Medium:['#E9D9B0','rgba(245,184,74,.1)'], Low:[AMB,'rgba(245,184,74,.12)'], '\u2014':['#5C6B61','transparent'], 'In review':['#8FA396','rgba(160,190,170,.08)'], Insufficient:['#5C6B61','transparent']};
     if (p.comp) {
       v.pBars = D.comps.map(c => { const val = p.comp[c.id]; const has = val != null; return {name:c.name, valTxt: has ? val.toFixed(1) : '\u2014', valColor: !has ? '#5C6B61' : val>=3.5 ? GL : val>=2.8 ? '#E9F0EA' : AMB, pct: has ? Math.round(val/5*100)+'%' : '0%', fill: val>=3.5 ? 'linear-gradient(90deg,rgba(16,185,129,.5),#10B981)' : 'linear-gradient(90deg,rgba(245,184,74,.4),#F5B84A)'}; });
@@ -897,7 +947,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.pDetails = [
       {label:'Email', val:dash(p.email)}, {label:'Phone', val:dash(p.phone)}, {label:'Location', val:dash(p.loc)}, {label:'School / organization', val:dash(p.schoolTxt != null ? p.schoolTxt : p.school)},
       {label:'Hiring for', val:dash(p.program)}, {label:'Work authorization', val: p.auth === true ? 'Yes' : p.auth === false ? 'No' : '\u2014'},
-      {label:'Entered as', val: p.source === 'manual' ? 'Added manually' : p.track === 'info' ? 'Details-only link' : 'Assessment link'}, {label:'Added', val: p.createdAt ? fmtDate(p.createdAt) : '\u2014'}
+      {label:'Entered as', val: p.source === 'self' ? 'Applied via ' + (p.sourceLabel || 'job link') + (p.campaign ? ' \u00b7 ' + p.campaign : '') + (p.adContent ? ' \u00b7 ' + p.adContent : '') : p.source === 'manual' ? 'Added manually' : p.track === 'info' ? 'Details-only link' : 'Assessment link'}, {label:'Added', val: p.createdAt ? fmtDate(p.createdAt) : '\u2014'}
     ];
     v.pLinkedin = p.linkedin || ''; v.pLinkedinHref = p.linkedin ? (/^https?:/.test(p.linkedin) ? p.linkedin : 'https://' + p.linkedin) : '';
     v.pResumeName = p.resumeName || ''; v.pHasResume = !!p.resumePath; v.openResume = () => this.openFile(p.id, p.resumePath);
@@ -912,6 +962,7 @@ export class PeakCombine extends React.Component<any, any> {
       statusColor: t.status === 'done' ? GL : t.status === 'failed' ? AMB : '#7E9186',
       summary: rv.summary || '', comps: (rv.competencies || []).map(c => ({name:c.name || c.id, rating: c.rating != null ? c.rating + ' / 5' : 'no evidence', color: c.rating == null ? '#5C6B61' : c.rating >= 4 ? GL : c.rating >= 3 ? '#E9F0EA' : AMB, quotes:(c.evidence || []).slice(0, 2).map(e => ({quote:e.quote || '', note:e.note || ''})), note:c.note || ''})),
       strengths: rv.strengths || [], concerns: rv.concerns || [], followUps: rv.followUps || [], caution: rv.caution || '',
+      canRerun: LIVE_ENABLED && isMgr, rerun: () => this.rerunTranscript(t.id), rerunBusy: st.busy === 'tr:' + t.id, rerunTxt: st.busy === 'tr:' + t.id ? 'Evaluating\u2026' : (t.status === 'done' ? 'Run evaluation again' : 'Run evaluation'),
       isCall: /^First call/i.test(t.kind || ''), grade: t.grade || rv.grade || '', gradeColor: GRADE_COLOR(t.grade || rv.grade), bullets: rv.bullets || [], covered: rv.alreadyCovered || [], askNext: rv.askNext || [], gradeRationale: rv.gradeRationale || '', screenerNotes: t.notes || rv.screenerNotes || ''}; };
     v.pTranscripts = allTr.filter(t => t.candId === p.id).map(trRow);
     v.trEnabled = LIVE_ENABLED && isMgr; v.trOpen = !!st.trOpen; v.toggleTr = () => this.setState({trOpen: !this.state.trOpen, tr:{...this.state.tr, msg:''}});
@@ -975,17 +1026,19 @@ export class PeakCombine extends React.Component<any, any> {
     const bankItems = bkRole ? [...bkRole.scenarios, ...bkRole.worst] : [];
     const bankSelId = bankItems.some(q => q.id === st.bankItemId) ? st.bankItemId : (bankItems[0] || {}).id;
     const bq = bankItems.find(q => q.id === bankSelId) || null;
-    v.bankList = bankItems.map((q, i) => ({num: String(i + 1).padStart(2, '0'), title: ((bkRole.competencies[q.comp] || {}).name || q.comp) + ' \u00b7 ' + q.id.toUpperCase(), ver: q.kind === 'worst' ? 'worst move' : 'scenario', edited: !!bkEdits[q.id], bg: q.id === bankSelId ? 'rgba(16,185,129,.08)' : '#0F1611', border: q.id === bankSelId ? 'rgba(16,185,129,.4)' : 'rgba(160,190,170,.13)', pick: () => this.setState({bankItemId:q.id, bankDraft:null, bankSaved:''})}));
+    v.bankList = bankItems.map((q, i) => ({num: String(i + 1).padStart(2, '0'), title: ((bkRole.competencies[q.comp] || {}).name || q.comp) + ' \u00b7 ' + (q.title || q.id.toUpperCase()), ver: q.kind === 'worst' ? 'worst move' : 'scenario', edited: !!bkEdits[q.id], bg: q.id === bankSelId ? 'rgba(16,185,129,.08)' : '#0F1611', border: q.id === bankSelId ? 'rgba(16,185,129,.4)' : 'rgba(160,190,170,.13)', pick: () => this.setState({bankItemId:q.id, bankDraft:null, bankSaved:''})}));
     const draft = (st.bankDraft && bq && st.bankDraft.id === bq.id) ? st.bankDraft : null;
     const cur = bq ? (draft || {id:bq.id, text:bq.text, why:B.whyFor(bkRole, bq), opts:bq.opts.map(o => ({text:o.text, score:o.score, flag:o.flag || '', positive:o.positive || ''}))}) : null;
     const setDraft = fn => { const d = JSON.parse(JSON.stringify(cur)); fn(d); this.setState({bankDraft:d, bankSaved:''}); };
-    v.bankTitle = bq ? ((bkRole.competencies[bq.comp] || {}).name || bq.comp) + ' \u00b7 ' + bq.id.toUpperCase() : '';
+    v.bankTitle = bq ? ((bkRole.competencies[bq.comp] || {}).name || bq.comp) + ' \u00b7 ' + (bq.title || bq.id.toUpperCase()) : '';
+    v.bankMeta = bq && bq.construct ? [bq.construct, bq.itemType, bq.mainSignal].filter(Boolean).join(' \u00b7 ') : '';
+    v.bankMiss = bq ? (bq.miss || '') : '';
     v.bankKind = bq ? (bq.kind === 'worst' ? 'Worst move \u2014 the candidate picks the most damaging action; the score is for how well they spotted it.' : 'Scenario \u2014 the candidate picks what they would actually do.') : '';
     v.bankIsWorst = !!(bq && bq.kind === 'worst');
     v.bankEdited = !!(bq && bkEdits[bq.id]); v.bankDirty = !!draft;
     v.bankStem = cur ? cur.text : ''; v.setBankStem = e => setDraft(d => { d.text = e.target.value; });
     v.bankWhy = cur ? cur.why : ''; v.setBankWhy = e => setDraft(d => { d.why = e.target.value; });
-    v.bankOpts = cur ? cur.opts.map((o, i) => ({letter:'ABCD'[i], text:o.text, score:String(o.score), signal: B.SIGNAL(Number(o.score) || 0), color: sigColor(Number(o.score) || 0), flag:o.flag, positive:o.positive,
+    v.bankOpts = cur ? cur.opts.map((o, i) => ({letter:'ABCD'[i], text:o.text, score:String(o.score), signal: (bq.opts[i] && bq.opts[i].interp && Number(o.score) === bq.opts[i].score) ? bq.opts[i].interp : B.SIGNAL(Number(o.score) || 0), reason: (bq.opts[i] && bq.opts[i].reason) || '', color: sigColor(Number(o.score) || 0), flag:o.flag, positive:o.positive,
       setText: e => setDraft(d => { d.opts[i].text = e.target.value; }), setScore: e => setDraft(d => { d.opts[i].score = e.target.value; }), setFlag: e => setDraft(d => { d.opts[i].flag = e.target.value; }), setPositive: e => setDraft(d => { d.opts[i].positive = e.target.value; })})) : [];
     v.bankScaleNote = B ? B.SCALE_NOTE : '';
     v.saveBank = () => { if (!draft || !bq) return; const clean = {text: draft.text, why: draft.why, opts: draft.opts.map(o => ({text:o.text, score: Math.max(0, Math.min(100, Math.round(Number(o.score) || 0))), flag:o.flag || '', positive:o.positive || ''}))}; const all = {...(this.state.bankEdits || {})}; all[bkPid] = {...(all[bkPid] || {}), [bq.id]: clean}; this.setState({bankEdits:all, bankDraft:null, bankSaved:'Saved \u2014 applies to every candidate scored from now on. Reports already on file keep their numbers until you re-score them from the profile.'}); };
@@ -1113,6 +1166,25 @@ export class PeakCombine extends React.Component<any, any> {
     v.toggleShare = () => { if (selJob) this.toggleJobFlag(selJob, 'share_enabled', !selJob.shareEnabled); }; v.toggleApply = () => { if (selJob) this.toggleJobFlag(selJob, 'apply_enabled', !selJob.applyEnabled); };
     v.jobStatusOpts = ['Open', 'Paused', 'Filled', 'Closed'].map(s => ({id:s, label:s})); v.setJobStatus = e => { if (selJob) this.setJobStatus(selJob, e.target.value); };
     v.boardMsg = st.board.msg || st.flash.board || '';
+    const postCands = D.candidates.filter(c => selJob && jobOf(c) === selJob.id);
+    // job posting (careers page) — draft fields commit on Save; links per channel carry the utm parameters ads need
+    const postD = st.posting && selJob && st.posting.jobId === selJob.id ? st.posting : (selJob ? {jobId:selJob.id, description:selJob.description || '', location:selJob.location || '', comp:selJob.comp || '', employment_type:selJob.employmentType || 'Full-time'} : null);
+    const setPost = k => e => this.setState({posting:{...(postD || {}), [k]: e.target.value}, postMsg:''});
+    v.postFields = postD ? [{label:'Location', ph:'e.g. Lubbock, TX \u00b7 on site', val:postD.location, set:setPost('location')}, {label:'Compensation', ph:'e.g. $55\u201365K base + commission', val:postD.comp, set:setPost('comp')}] : [];
+    v.postType = postD ? postD.employment_type : 'Full-time'; v.setPostType = setPost('employment_type'); v.postTypes = ['Full-time', 'Part-time', 'Seasonal', 'Internship', 'Contract'].map(t => ({id:t, label:t}));
+    v.postDesc = postD ? postD.description : ''; v.setPostDesc = setPost('description');
+    v.postDirty = !!(st.posting && selJob && st.posting.jobId === selJob.id); v.savePosting = () => this.savePosting(selJob); v.postBusy = st.busy === 'post';
+    v.postOn = !!(selJob && selJob.posted); v.togglePosted = () => this.togglePosted(selJob); v.postMsg = st.postMsg || '';
+    v.postStatusTxt = !selJob ? '' : selJob.posted ? (selJob.status === 'Open' && selJob.applyEnabled ? 'Listed on the careers page' : 'Marked as posted, but hidden because the job is ' + (selJob.status !== 'Open' ? selJob.status.toLowerCase() : 'not accepting applications')) : 'Not on the careers page';
+    v.postStatusColor = selJob && selJob.posted && selJob.status === 'Open' && selJob.applyEnabled ? GL : selJob && selJob.posted ? AMB : '#7E9186';
+    const careersUrl = () => window.location.origin + (window.location.pathname === '/' ? '/careers' : window.location.pathname + '?live=1&careers=1');
+    v.careersUrl = careersUrl();
+    const jobSlug = selJob ? slugify(selJob.title + ' ' + selJob.program) : '';
+    v.channelLinks = selJob ? CHANNEL_LINKS.map(ch => { const url = selJob.applyLink + '&' + ch.q + '&utm_campaign=' + jobSlug; return {id:ch.id, label:ch.label, url, copy: () => this.copyBoardLink(url)}; }) : [];
+    v.copyCareers = () => this.copyBoardLink(v.careersUrl);
+    v.boardSources = selJob ? srcCount(postCands) : []; v.hasBoardSources = v.boardSources.length > 0;
+    const campaigns = {}; postCands.filter(c => c.source === 'self' && c.campaign).forEach(c => { const k = (c.sourceLabel || '') + ' \u00b7 ' + c.campaign + (c.adContent ? ' \u00b7 ' + c.adContent : ''); campaigns[k] = (campaigns[k] || 0) + 1; });
+    v.boardCampaigns = Object.entries(campaigns).sort((a, b) => b[1] - a[1]).map(([label, n]) => ({label, n}));
     const stageOf = c => (!LIVE_ENABLED && st.taLocal[c.id]) || c.stageTxt || c.taStage || (c.stage >= 6 ? 'Offer' : c.stage >= 5 ? 'Combine' : c.stage >= 4 ? 'Assessment' : 'Applied');
     const daysSince = iso => { if (!iso) return ''; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 864e5); return isNaN(d) ? '' : d <= 0 ? 'today' : d + 'd'; };
     const jobCands = D.candidates.filter(c => selJob && jobOf(c) === selJob.id);
@@ -1187,7 +1259,7 @@ export class PeakCombine extends React.Component<any, any> {
       v.ncLinkLabel = (nc.track || 'assessment') === 'info' ? 'details link' : 'assessment link';
       v.ncSaved = nc.saved || ''; v.ncSavedColor = /^Could not/.test(nc.saved || '') ? RED : GL;
       v.pipeEmpty = v.isStaff && D.candidates.length === 0;
-      v.pipeRows = v.pipeRows.map((row, i) => { const c = D.candidates[i]; if (!c) return row; const info = c.track === 'info'; return {...row, stageLabel: c.stageLabel, dSub: st.blind ? row.dSub : ((c.loc && c.loc !== '\u2014' ? c.loc + ' \u00b7 ' : '') + c.email), canReview:false, showInvite: isMgr && !c.withdrawn && !c.done.s3 && !(info && c.infoDone), showUpgrade: isMgr && !c.withdrawn && (info || c.source === 'manual') && !c.done.s3, upgradeTxt: info ? 'Send assessment link' : 'Email assessment link', resendTxt: (c.inviteSent ? 'Resend ' : 'Email ') + (info ? 'details link' : 'link'), resend: () => this.sendInviteTo(c), copy: () => this.copyLinkFor(c), upgrade: () => this.sendInviteTo(c, 'assessment'), flash: st.flash[c.id] || '', inviteState: c.inviteState + (c.resendRequested ? ' \u00b7 new link requested' : ''), inviteColor: (c.resendRequested || c.expired) ? AMB : c.opened ? GL : '#8FA396', tag: c.source === 'manual' ? 'Added manually' : info ? 'Details-only link' : '', hasResume: !!c.resumePath, grade: c.callGrade || '', gradeColor: GRADE_COLOR(c.callGrade), boardStage: c.stageTxt || ''}; });
+      v.pipeRows = v.pipeRows.map((row, i) => { const c = D.candidates[i]; if (!c) return row; const info = c.track === 'info'; return {...row, stageLabel: c.stageLabel, dSub: st.blind ? row.dSub : ((c.loc && c.loc !== '\u2014' ? c.loc + ' \u00b7 ' : '') + c.email), canReview:false, showInvite: isMgr && !c.withdrawn && !c.done.s3 && !(info && c.infoDone), showUpgrade: isMgr && !c.withdrawn && (info || c.source === 'manual') && !c.done.s3, upgradeTxt: info ? 'Send assessment link' : 'Email assessment link', resendTxt: (c.inviteSent ? 'Resend ' : 'Email ') + (info ? 'details link' : 'link'), resend: () => this.sendInviteTo(c), copy: () => this.copyLinkFor(c), upgrade: () => this.sendInviteTo(c, 'assessment'), flash: st.flash[c.id] || '', inviteState: c.inviteState + (c.resendRequested ? ' \u00b7 new link requested' : ''), inviteColor: (c.resendRequested || c.expired) ? AMB : c.opened ? GL : '#8FA396', tag: c.source === 'self' ? 'Applied via ' + (c.sourceLabel || 'job link') + (c.campaign ? ' \u00b7 ' + c.campaign : '') : c.source === 'manual' ? 'Added manually' : info ? 'Details-only link' : '', hasResume: !!c.resumePath, grade: c.callGrade || '', gradeColor: GRADE_COLOR(c.callGrade), boardStage: c.stageTxt || ''}; });
       // profile
       v.pNeedsScore = !!(p && p.done && p.done.s3 && !p.report && isMgr);
       v.rpNeedsEvidence = !!(p && p.report && !(p.report.items && p.report.items.length) && isMgr);
@@ -1281,6 +1353,12 @@ export class PeakCombine extends React.Component<any, any> {
       const pb = st.pub, pd = pb.data || {}, job = pd.job || {};
       v.pubKind = this.publicKind; v.pubLoading = pb.status === 'loading'; v.pubInvalid = pb.status === 'invalid'; v.pubClosed = pb.status === 'closed'; v.pubOk = pb.status === 'ok'; v.pubDone = pb.status === 'done';
       v.pubTitle = job.title || ''; v.pubProgram = job.program || ''; v.pubMsg = pb.msg || ''; v.pubBusy = !!pb.busy; v.pubLink = pb.link || '';
+      v.pubFacts = [job.location, job.employment_type, job.comp].filter(Boolean); v.pubDesc = job.description || '';
+      v.careersHref = window.location.pathname === '/' ? '/careers' + (this.utmQuery() ? '?' + this.utmQuery().slice(1) : '') : window.location.pathname + '?live=1&careers=1' + this.utmQuery();
+      const jobHref = t => (window.location.pathname === '/' ? '/?apply=' : window.location.pathname + '?live=1&apply=') + t + this.utmQuery();
+      const excerpt = s => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > 220 ? t.slice(0, 217).replace(/\s+\S*$/, '') + '\u2026' : t; };
+      v.pubJobs = (pd.jobs || []).map(j => ({title:j.title, program:j.program || '', facts:[j.location, j.employment_type, j.comp].filter(Boolean).join(' \u00b7 '), excerpt: excerpt(j.description), href: jobHref(j.apply_token)}));
+      v.pubNoJobs = v.pubKind === 'careers' && pb.status === 'ok' && !v.pubJobs.length;
       const f = pb.form;
       const setF = k => e => this.setState({pub:{...this.state.pub, form:{...this.state.pub.form, [k]: e.target.value}, msg:''}});
       v.pubFields = [{label:'Full name', ph:'First and last name', val:f.name, set:setF('name')}, {label:'Email', ph:'you@example.com', val:f.email, set:setF('email')}, {label:'Phone', ph:'(555) 000-0000', val:f.phone, set:setF('phone')}, {label:'Location', ph:'City, State \u00b7 open to relocation?', val:f.loc, set:setF('loc')}, {label:'LinkedIn (optional)', ph:'linkedin.com/in/\u2026', val:f.linkedin, set:setF('linkedin')}];

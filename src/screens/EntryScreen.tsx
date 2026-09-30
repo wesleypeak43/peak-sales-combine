@@ -43,6 +43,9 @@ export function EntryScreen({ V }: { V: any }) {
               <button onClick={V.forgotPw} style={{background: "none", border: "none", color: "#8FA396", fontSize: "12px", cursor: "pointer", padding: "6px 0 0", textDecoration: "underline"}}>Forgot password?</button>
             </>) : null}
             <p style={{margin: "6px 0 0", fontSize: "11.5px", color: "#5C6B61", lineHeight: "1.55"}}>Staff only. Candidates never sign in here — they receive a personal, expiring link by email and see only their own assessment.</p>
+            {V.careersLink ? (<>
+              <a href={V.careersLink} style={{display: "inline-block", marginTop: "12px", fontSize: "12.5px", fontWeight: "700", color: "#34D399", textDecoration: "none"}}>Looking for open roles? See careers →</a>
+            </>) : null}
           </>)}
         </div>
         {V.isDemo ? (<>

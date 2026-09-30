@@ -205,6 +205,19 @@ insert into public.jobs (title, program)
 update public.candidates c set job_id = j.id from public.jobs j
   where c.job_id is null and j.title = c.role and j.program = coalesce(c.program, '');
 
+-- ---------- v3.3 additions (safe on an existing database) ----------
+-- Job postings for the careers page, and where each self-applied candidate came from (utm_* / src / fbclid captured at apply time).
+alter table public.jobs
+  add column if not exists description text not null default '',
+  add column if not exists location text not null default '',
+  add column if not exists comp text not null default '',
+  add column if not exists employment_type text not null default 'Full-time',
+  add column if not exists posted boolean not null default false,
+  add column if not exists posted_at timestamptz;
+alter table public.candidates
+  add column if not exists utm jsonb not null default '{}'::jsonb,
+  add column if not exists applied_at timestamptz;
+
 -- ---------- who is asking? ----------
 create or replace function public.current_staff_id() returns uuid
 language sql stable security definer set search_path = public as $$
@@ -556,11 +569,20 @@ begin
   if not j.apply_enabled or j.status not in ('Open') then
     return jsonb_build_object('status', 'closed', 'job', jsonb_build_object('title', j.title, 'program', j.program));
   end if;
-  return jsonb_build_object('status', 'ok', 'job', jsonb_build_object('title', j.title, 'program', j.program));
+  return jsonb_build_object('status', 'ok', 'job', jsonb_build_object('title', j.title, 'program', j.program, 'location', j.location, 'comp', j.comp, 'employment_type', j.employment_type, 'description', j.description, 'posted', j.posted));
 end $$;
+
+-- Careers page: every posted, open job (no token — this is the public listing).
+create or replace function public.careers_open() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('status', 'ok', 'jobs', coalesce((
+    select jsonb_agg(jsonb_build_object('apply_token', j.apply_token, 'title', j.title, 'program', j.program, 'location', j.location, 'comp', j.comp, 'employment_type', j.employment_type, 'description', j.description, 'posted_at', j.posted_at) order by j.posted_at desc nulls last, j.created_at desc)
+    from public.jobs j where j.posted and j.apply_enabled and j.status = 'Open'), '[]'::jsonb));
+$$;
 
 grant execute on function public.board_open(text) to anon, authenticated;
 grant execute on function public.apply_open(text) to anon, authenticated;
+grant execute on function public.careers_open() to anon, authenticated;
 
 -- ---------- bookkeeping triggers ----------
 create or replace function public.handle_auth_signin() returns trigger

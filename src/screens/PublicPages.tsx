@@ -27,16 +27,55 @@ export function PublicPages({ V }: { V: any }) {
     </div>
   );
   return (
-    <main style={{flex: "1", width: "100%", maxWidth: V.pubKind === 'board' ? "1400px" : "760px", margin: "0 auto", padding: "40px clamp(16px,4vw,28px) 80px", boxSizing: "border-box"}}>
+    <main style={{flex: "1", width: "100%", maxWidth: V.pubKind === 'board' ? "1400px" : V.pubKind === 'careers' ? "1080px" : "760px", margin: "0 auto", padding: "40px clamp(16px,4vw,28px) 80px", boxSizing: "border-box"}}>
       {brand}
       {V.pubLoading ? status('One moment', 'Loading…') : null}
       {V.pubInvalid ? status('Link not valid', 'This link is not active. Check that you copied the whole address, or ask the person who sent it for a new one.') : null}
       {V.pubClosed ? status('Applications closed', 'Applications for this role (' + [V.pubTitle, V.pubProgram].filter(Boolean).join(' · ') + ') are closed for now. Thanks for your interest.') : null}
+      {V.pubKind === 'careers' && V.pubOk ? (<>
+        <div style={{animation: "fadeUp .4s ease both"}}>
+          <div style={KICKER}>Careers · Peak Sports MGMT</div>
+          <h1 style={H1}>Sales careers in college athletics.</h1>
+          <p style={{margin: "0 0 28px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "620px"}}>Peak builds revenue for college athletics departments. Every role below starts with the Peak Sales Combine — a short, structured look at how you actually sell, not a personality quiz. Apply in two minutes; the assessment takes 20–30 more.</p>
+          {V.pubNoJobs ? (<>
+            <div style={{...CARD, maxWidth: "560px"}}>
+              <div style={KICKER}>No open roles right now</div>
+              <p style={{margin: "0", fontSize: "14px", lineHeight: "1.65", color: "#A7B5AB"}}>Check back soon — new roles are posted here first.</p>
+            </div>
+          </>) : null}
+          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: "14px"}}>
+            {(V.pubJobs ?? []).map((j: any, $index: number) => (<React.Fragment key={$index}>
+              <a href={j?.href} style={{...CARD, display: "flex", flexDirection: "column", gap: "8px", textDecoration: "none", color: "#E9F0EA", border: "1px solid rgba(160,190,170,.16)"}}>
+                <div style={{fontSize: "19px", fontWeight: "800", lineHeight: "1.2"}}>{j?.title}</div>
+                <div style={{fontSize: "13px", color: "#34D399", fontWeight: "700"}}>{j?.program}</div>
+                {j?.facts ? (<div style={{fontSize: "12px", color: "#8FA396"}}>{j?.facts}</div>) : null}
+                {j?.excerpt ? (<p style={{margin: "4px 0 0", fontSize: "13px", lineHeight: "1.55", color: "#A7B5AB"}}>{j?.excerpt}</p>) : null}
+                <div style={{marginTop: "auto", paddingTop: "10px", fontSize: "13px", fontWeight: "800", color: "#34D399"}}>View &amp; apply →</div>
+              </a>
+            </React.Fragment>))}
+          </div>
+        </div>
+      </>) : null}
       {V.pubKind === 'apply' && V.pubOk ? (<>
         <div style={{animation: "fadeUp .4s ease both"}}>
+          <a href={V.careersHref} style={{display: "inline-block", marginBottom: "16px", fontSize: "13px", color: "#8FA396", textDecoration: "none"}}>← All open roles</a>
           <div style={KICKER}>{V.pubTitle}{V.pubProgram ? ' · ' + V.pubProgram : ''}</div>
-          <h1 style={H1}>Apply in two minutes.</h1>
-          <p style={{margin: "0 0 24px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "620px"}}>Tell us how to reach you, then you go straight into the Peak Sales Combine — about 20–30 minutes, all multiple choice, and you can save and return. Your résumé is uploaded inside the assessment.</p>
+          <h1 style={H1}>{V.pubTitle}</h1>
+          {(V.pubFacts ?? []).length ? (<>
+            <div style={{display: "flex", gap: "8px", flexWrap: "wrap", margin: "0 0 18px"}}>
+              {(V.pubFacts ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
+                <span style={{fontSize: "12.5px", color: "#D5DED7", background: "#0F1611", border: "1px solid rgba(160,190,170,.16)", borderRadius: "99px", padding: "6px 12px"}}>{f}</span>
+              </React.Fragment>))}
+            </div>
+          </>) : null}
+          {V.pubDesc ? (<>
+            <div style={{...CARD, marginBottom: "22px"}}>
+              <div style={MONO}>About the role</div>
+              <p style={{margin: "10px 0 0", fontSize: "14.5px", lineHeight: "1.7", color: "#D5DED7", whiteSpace: "pre-wrap"}}>{V.pubDesc}</p>
+            </div>
+          </>) : null}
+          <div style={{...KICKER, color: "#7E9186"}}>Apply</div>
+          <p style={{margin: "0 0 20px", fontSize: "15px", lineHeight: "1.6", color: "#A7B5AB", maxWidth: "620px"}}>Tell us how to reach you, then you go straight into the Peak Sales Combine — about 20–30 minutes, all multiple choice, and you can save and return. Your résumé is uploaded inside the assessment.</p>
           <div style={{...CARD, marginBottom: "18px"}}>
             <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "14px"}}>
               {(V.pubFields ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>

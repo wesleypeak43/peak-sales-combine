@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const P = cand.progress || {};
     const answers = P.bkAns || {};
     if (!Object.keys(answers).length) return send(res, 400, { error: 'No Sales Decisions answers on file yet.' });
-    const profId = (PEAK_DATA.profileByRole || {})[cand.role] || 'entry';
+    const profId = PEAK_BANK.profileIdForAnswers((PEAK_DATA.profileByRole || {})[cand.role] || 'entry', answers);
     const base = PEAK_BANK.ROLES[profId] || PEAK_BANK.ROLES.entry;
     const { data: rows } = await sb.from('settings').select('key,value').in('key', ['bankSettings', 'bankEdits']);
     const S = Object.fromEntries((rows || []).map(r => [r.key, r.value]));

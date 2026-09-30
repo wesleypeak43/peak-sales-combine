@@ -60,6 +60,17 @@ export function StaffDashboard({ V }: { V: any }) {
             </div>
           </div>
         </div>
+        {V.hasSources ? (<>
+          <div style={{...SCARD, marginTop: "18px", padding: "18px 22px"}}>
+            <div style={SLBL}>Where candidates come from</div>
+            <p style={SNOTE}>{V.sourceNote}</p>
+            <div style={{display: "flex", gap: "8px", flexWrap: "wrap"}}>
+              {(V.sourceRows ?? []).map((s: any, $index: number) => (<React.Fragment key={$index}>
+                <span style={{fontSize: "12.5px", color: "#D5DED7", background: "#0B120E", border: "1px solid rgba(160,190,170,.14)", borderRadius: "99px", padding: "6px 12px"}}><b>{s?.n}</b>{" · "}{s?.label}<span style={{color: "#5C6B61"}}>{" · "}{s?.pct}</span></span>
+              </React.Fragment>))}
+            </div>
+          </div>
+        </>) : null}
       </>) : null}
       {V.vPipe ? (<>
         <div style={{animation: "fadeUp .35s ease both"}}>
@@ -235,6 +246,55 @@ export function StaffDashboard({ V }: { V: any }) {
               </>) : null}
               {V.boardMsg ? (<><div style={{flexBasis: "100%", fontSize: "12px", color: "#34D399", wordBreak: "break-all"}}>{V.boardMsg}</div></>) : null}
             </div>
+            {V.boardIsMgr && V.boardLive && V.boardTitle ? (<>
+              <div style={{...SCARD, padding: "18px 22px", marginBottom: "16px"}}>
+                <div style={{display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "12px"}}>
+                  <div style={{...SLBL, marginBottom: "0", flex: "1"}}>Job posting · careers page</div>
+                  <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", letterSpacing: ".06em", textTransform: "uppercase", color: V.postStatusColor}}>{V.postStatusTxt}</span>
+                  <button onClick={V.togglePosted} style={{...CHIP_BTN, color: V.postOn ? "#F5B84A" : "#04120B", background: V.postOn ? "transparent" : "#10B981", border: V.postOn ? "1px solid rgba(245,184,74,.35)" : "none", fontWeight: "800"}}>{V.postOn ? 'Remove from careers page' : 'Post on careers page'}</button>
+                </div>
+                <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "10px"}}>
+                  {(V.postFields ?? []).map((f: any, $index: number) => (<React.Fragment key={$index}>
+                    <input value={(f?.val) ?? ''} onChange={f?.set} placeholder={f?.ph} style={INPUT} />
+                  </React.Fragment>))}
+                  <select value={(V.postType) ?? ''} onChange={V.setPostType} style={INPUT}>
+                    {(V.postTypes ?? []).map((o: any, $index: number) => (<React.Fragment key={$index}><option value={o?.id}>{o?.label}</option></React.Fragment>))}
+                  </select>
+                </div>
+                <textarea value={(V.postDesc) ?? ''} onChange={V.setPostDesc} rows={6} placeholder="Describe the role the way you would on Teamworks: what the job is, who thrives in it, what a week looks like, comp structure, start date. Plain text; blank lines make paragraphs." style={{...STA, marginTop: "10px"}} />
+                <div style={{display: "flex", gap: "10px", alignItems: "center", marginTop: "10px", flexWrap: "wrap"}}>
+                  <button onClick={V.savePosting} disabled={!V.postDirty || V.postBusy} style={{background: V.postDirty ? "#10B981" : "#20302680", color: "#04120B", border: "none", borderRadius: "9px", padding: "9px 16px", fontSize: "12.5px", fontWeight: "800", cursor: "pointer"}}>{V.postBusy ? 'Saving…' : 'Save posting'}</button>
+                  {V.postMsg ? (<span style={{fontSize: "12.5px", color: "#34D399", fontWeight: "700"}}>{V.postMsg}</span>) : null}
+                </div>
+                <div style={{borderTop: "1px solid rgba(160,190,170,.1)", marginTop: "16px", paddingTop: "14px"}}>
+                  <div style={SLBL}>Tracking links · one per channel</div>
+                  <p style={SNOTE}>Use the matching link wherever the job is advertised. Applications through it are tagged with the channel and this job’s campaign name, so the pipeline shows exactly which ad or posting each candidate came from. In Facebook Ads Manager paste the Facebook link as the destination URL (or add its utm parameters under URL parameters).</p>
+                  <div style={{display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center"}}>
+                    <button onClick={V.copyCareers} style={GHOST_BTN}>Copy careers page link</button>
+                    {(V.channelLinks ?? []).map((l: any, $index: number) => (<React.Fragment key={$index}>
+                      <button onClick={l?.copy} style={CHIP_BTN}>{"Copy " + l?.label + " link"}</button>
+                    </React.Fragment>))}
+                  </div>
+                </div>
+                {V.hasBoardSources ? (<>
+                  <div style={{borderTop: "1px solid rgba(160,190,170,.1)", marginTop: "16px", paddingTop: "14px"}}>
+                    <div style={SLBL}>Where this job’s candidates came from</div>
+                    <div style={{display: "flex", gap: "8px", flexWrap: "wrap"}}>
+                      {(V.boardSources ?? []).map((s: any, $index: number) => (<React.Fragment key={$index}>
+                        <span style={{fontSize: "12.5px", color: "#D5DED7", background: "#0B120E", border: "1px solid rgba(160,190,170,.14)", borderRadius: "99px", padding: "6px 12px"}}><b>{s?.n}</b>{" · "}{s?.label}<span style={{color: "#5C6B61"}}>{" · "}{s?.pct}</span></span>
+                      </React.Fragment>))}
+                    </div>
+                    {(V.boardCampaigns ?? []).length ? (<>
+                      <div style={{display: "flex", flexDirection: "column", gap: "4px", marginTop: "10px"}}>
+                        {(V.boardCampaigns ?? []).map((c: any, $index: number) => (<React.Fragment key={$index}>
+                          <div style={{fontSize: "12px", color: "#8FA396"}}><b style={{color: "#D5DED7"}}>{c?.n}</b>{" · "}{c?.label}</div>
+                        </React.Fragment>))}
+                      </div>
+                    </>) : null}
+                  </div>
+                </>) : null}
+              </div>
+            </>) : null}
             {V.hasUnassigned ? (<>
               <div style={{...SCARD, borderColor: "rgba(245,184,74,.35)", padding: "14px 22px", marginBottom: "16px"}}>
                 <div style={{...SLBL, color: "#E9D9B0"}}>Not on any job yet</div>
@@ -382,6 +442,9 @@ export function StaffDashboard({ V }: { V: any }) {
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "700", letterSpacing: ".12em", textTransform: "uppercase", color: "#04120B", padding: "4px 10px", borderRadius: "99px", background: V.rpColor}}>{V.rpBand}</span>
                   </div>
                   <p style={{margin: "10px 0 0", fontSize: "12.5px", color: "#A7B5AB", lineHeight: "1.55"}}>{V.rpNote}</p>
+                  {V.rpPilot ? (<>
+                    <div style={{marginTop: "10px", fontSize: "12px", color: "#E9D9B0", lineHeight: "1.55", background: "rgba(245,184,74,.07)", border: "1px solid rgba(245,184,74,.3)", borderRadius: "10px", padding: "10px 12px"}}>{V.rpPilotNote}</div>
+                  </>) : null}
                   <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".08em", textTransform: "uppercase", color: "#5C6B61", marginTop: "12px", lineHeight: "1.5"}}>{V.rpProfile}</div>
                   <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "4px"}}>{V.rpScen}</div>
                   {V.rpCanRescore ? (<>
@@ -549,12 +612,16 @@ export function StaffDashboard({ V }: { V: any }) {
                                     {(e?.options ?? []).map((o: any, $i3: number) => (<React.Fragment key={$i3}>
                                       <div style={{display: "flex", gap: "8px", alignItems: "baseline", color: o?.chosen ? "#E9F0EA" : "#7E9186", fontWeight: o?.weight}}>
                                         <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", color: o?.color, minWidth: "26px", textAlign: "right"}}>{o?.score}</span>
-                                        <span style={{flex: "1"}}>{o?.chosen ? "▸ " : ""}{o?.text}{o?.flag ? <span style={{color: "#F0A070", fontWeight: "400"}}>{" · " + o.flag}</span> : null}{o?.positive ? <span style={{color: "#34D399", fontWeight: "400"}}>{" · " + o.positive}</span> : null}</span>
+                                        <div style={{flex: "1"}}>
+                                          <div>{o?.chosen ? "▸ " : ""}{o?.text}{o?.flag ? <span style={{color: "#F0A070", fontWeight: "400"}}>{" · " + o.flag}</span> : null}{o?.positive ? <span style={{color: "#34D399", fontWeight: "400"}}>{" · " + o.positive}</span> : null}</div>
+                                          {o?.reason ? (<div style={{fontSize: "10.5px", color: "#5C6B61", fontWeight: "400", lineHeight: "1.45"}}>{o?.signal}{" — "}{o?.reason}</div>) : null}
+                                        </div>
                                       </div>
                                     </React.Fragment>))}
                                   </div>
                                 </>) : null}
                                 {e?.why ? (<div style={{color: "#8FA396", marginTop: "6px"}}><span style={{color: "#5C6B61"}}>Why · </span>{e?.why}</div>) : null}
+                                {e?.miss ? (<div style={{color: "#8FA396", marginTop: "4px"}}><span style={{color: "#5C6B61"}}>Reading a miss · </span>{e?.miss}</div>) : null}
                               </div>
                             </React.Fragment>))}
                           </div>
@@ -562,6 +629,19 @@ export function StaffDashboard({ V }: { V: any }) {
                       </React.Fragment>))}
                     </div>
                   </>) : null}
+                </div>
+              </>) : null}
+              {V.rpHasInsights ? (<>
+                <div style={{marginTop: "14px", background: "#0B120E", borderRadius: "12px", padding: "16px 18px"}}>
+                  <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", fontWeight: "600", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "10px"}}>Working style · not scored · for onboarding and management only</div>
+                  <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "10px 18px"}}>
+                    {(V.rpInsights ?? []).map((x: any, $index: number) => (<React.Fragment key={$index}>
+                      <div>
+                        <div style={{fontSize: "11.5px", color: "#8FA396", lineHeight: "1.45"}}>{x?.q}</div>
+                        <div style={{fontSize: "13px", color: "#E9F0EA", fontWeight: "700", marginTop: "3px"}}>{x?.answer}</div>
+                      </div>
+                    </React.Fragment>))}
+                  </div>
                 </div>
               </>) : null}
               <p style={{margin: "16px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.5"}}>{"Signal from the candidate’s own decisions, scored against the "}{V.rpProfName}{" profile’s floors and weights (Weights tab). It sharpens the interview and the combine; it does not make the decision, and the candidate never sees it."}</p>
@@ -619,6 +699,9 @@ export function StaffDashboard({ V }: { V: any }) {
                     </div>
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".06em", textTransform: "uppercase", color: t?.statusColor}}>{t?.statusTxt}</span>
                     <button onClick={t?.toggle} style={{background: "transparent", color: "#A7B5AB", border: "1px solid rgba(160,190,170,.2)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>{t?.toggleTxt}</button>
+                    {t?.canRerun ? (<>
+                      <button onClick={t?.rerun} disabled={!!t?.rerunBusy} style={{background: "transparent", color: t?.hasReview ? "#8FA396" : "#34D399", border: t?.hasReview ? "1px solid rgba(160,190,170,.2)" : "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer", opacity: t?.rerunBusy ? .6 : 1}}>{t?.rerunTxt}</button>
+                    </>) : null}
                   </div>
                   {t?.hasReview && t?.isCall ? (<>
                     <div style={{display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: "16px", marginTop: "14px", alignItems: "start"}}>
@@ -885,7 +968,7 @@ export function StaffDashboard({ V }: { V: any }) {
                 <div style={{fontSize: "17px", fontWeight: "800", flex: "1"}}>{V.bankTitle}</div>
                 {V.bankEdited ? (<span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".08em", textTransform: "uppercase", color: "#F5B84A", background: "rgba(245,184,74,.12)", padding: "3px 8px", borderRadius: "99px"}}>edited</span>) : null}
               </div>
-              <p style={{margin: "0 0 16px", fontSize: "12px", color: "#8FA396", lineHeight: "1.55"}}>{V.bankKind}</p>
+              <p style={{margin: "0 0 16px", fontSize: "12px", color: "#8FA396", lineHeight: "1.55"}}>{V.bankKind}{V.bankMeta ? " " + V.bankMeta : ""}</p>
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "7px"}}>Question</div>
               <textarea value={(V.bankStem) ?? ''} onChange={V.setBankStem} rows={3} disabled={!V.bankCanEdit} style={{...STA, marginBottom: "16px"}} />
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", marginBottom: "7px"}}>{"Options · score 0–100 · flag / positive label"}</div>
@@ -895,6 +978,7 @@ export function StaffDashboard({ V }: { V: any }) {
                     <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "12px", color: "#7E9186", paddingTop: "13px"}}>{o?.letter}</span>
                     <div>
                       <textarea value={(o?.text) ?? ''} onChange={o?.setText} rows={2} disabled={!V.bankCanEdit} style={STA} />
+                      {o?.reason ? (<div style={{fontSize: "11.5px", color: "#8FA396", lineHeight: "1.5", marginTop: "5px"}}><span style={{color: o?.color, fontWeight: "700"}}>{o?.signal}</span>{" — "}{o?.reason}</div>) : null}
                       {!V.bankIsWorst ? (<>
                         <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "6px"}}>
                           <input value={(o?.flag) ?? ''} onChange={o?.setFlag} disabled={!V.bankCanEdit} placeholder="Red-flag label (if this answer should raise one)" style={{...INPUT, padding: "8px 10px", fontSize: "12px", color: "#F0A070"}} />
@@ -911,6 +995,7 @@ export function StaffDashboard({ V }: { V: any }) {
               </div>
               <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".14em", textTransform: "uppercase", color: "#7E9186", margin: "16px 0 7px"}}>Why it scores this way — shown to staff on every report</div>
               <textarea value={(V.bankWhy) ?? ''} onChange={V.setBankWhy} rows={4} disabled={!V.bankCanEdit} style={STA} />
+              {V.bankMiss ? (<div style={{fontSize: "12px", color: "#8FA396", lineHeight: "1.55", marginTop: "8px"}}><span style={{color: "#5C6B61"}}>How to read a miss · </span>{V.bankMiss}</div>) : null}
               <p style={{margin: "10px 0 0", fontSize: "11px", color: "#5C6B61", lineHeight: "1.55"}}>{V.bankScaleNote}</p>
               {V.bankCanEdit ? (<>
                 <div style={{display: "flex", alignItems: "center", gap: "14px", marginTop: "18px", flexWrap: "wrap"}}>
