@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     // Question-bank edits (scores, flags, wording) apply to everyone scored from the moment they were saved.
     const edits = S.bankEdits && S.bankEdits[profId] && !Array.isArray(S.bankEdits[profId]) ? S.bankEdits[profId] : null;
     const prof = PEAK_BANK.applyEdits(base, edits);
-    const report = PEAK_BANK.score(prof, answers, settings);
+    const report = PEAK_BANK.score(prof, answers, settings, { times: P.bkTimes || null });
     report.profileId = profId; report.edited = !!edits;
     const { error } = await sb.from('candidates').update({ report, scored_at: new Date().toISOString() }).eq('id', cand.id);
     if (error) throw new Error(error.message);

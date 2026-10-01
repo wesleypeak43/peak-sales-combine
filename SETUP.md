@@ -117,9 +117,18 @@ With this, scheduling a combine creates the event on a Peak calendar, invites th
 - Every self-applied candidate shows **Applied via Facebook ad · campaign** (or Teamworks, LinkedIn, Careers page) on the pipeline row and profile. The Jobs tab shows the per-job breakdown and per-campaign counts; the Funnel tab shows the totals.
 - Candidates who arrive from the careers page keep their attribution through the job page and into the application (kept for the browser session).
 
-## Director of Sales assessment — V5
+## Director of Sales assessment — V5.1
 
-Director of Sales candidates now take the **V5** bank (Peak's September 2026 redesign): 32 scenarios in six independent categories, one construct per item, industry-neutral, interleaved and answer-shuffled per candidate, followed by three **non-scored** working-style questions (feedback cadence, recognition, structure vs. autonomy) shown on the profile for onboarding only. The report labels V5 as a **pilot**: the six category scores are what matter; the overall and band are provisional composites, per the V5 guidance. Every answer in the trail carries V5's interpretation (Benchmark / Very strong / Effective / Reasonable / Weak / Material risk) and its “why it is graded this way”, plus each item's “why this question is asked” and “how to interpret a miss”. Exercise B for Director of Sales is V5's finalist work sample ($200K goal, $80K sold, 8 questions). Candidates who answered the previous Director of Sales bank keep scoring and reading against it (shown as *v4, retired*).
+Director of Sales candidates take the **V5.1** bank: Peak's September 2026 redesign (32 scenarios, six independent categories, one construct per item, industry-neutral) hardened in October after the employee pilot clustered at 90–100:
+
+- **Two picks per scenario.** The candidate chooses the move they would *most* likely make and the one they would *least* likely make. Both score — the least-likely pick earns 100 minus that option's value — so all four options have to be weighed. Ruling out the benchmark move shows up as a red flag.
+- **Options re-written** so sentence structure and length are balanced across all four: about half the benchmarks are single-clause and about half the distractors are two-part, with no cue words — so neither a “do both” structure nor length points at the answer.
+- **Steeper scale.** Second-best is 78 (was 88), “effective” 55 (was 75); a material-risk pick is 0.
+- **Pace check.** The browser times every item. Finishing faster than anyone could read (median under ~9 s per scenario) marks the report **unreliable** rather than scoring it.
+
+Items are interleaved and answer-shuffled per candidate, followed by three **non-scored** working-style questions shown on the profile for onboarding only. The report labels V5.1 a **pilot**: the six category scores are what matter; the overall and band are provisional composites, and **V5 employee-pilot scores are not comparable with V5.1**. Every answer in the trail carries the interpretation (Benchmark / Very strong / Effective / Reasonable / Weak / Material risk), its “why it is graded this way”, each item's “why this question is asked” and “how to interpret a miss”, and both picks. Exercise B for Director of Sales is V5's finalist work sample ($200K goal, $80K sold, 8 questions). Candidates who answered the previous Director of Sales bank keep scoring and reading against it (shown as *v4, retired*).
+
+**Setting the bar.** Run the test on two or three careful non-salespeople and on your sellers; set the Validate / Below thresholds (Weights tab) between the two groups once you have those scores.
 
 ## Upgrading an existing database
 

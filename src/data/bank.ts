@@ -610,11 +610,15 @@ export function itemEvidence(role, answers) {
     out.push({ id: q.id, kind: "pair", comp: side[0], compName: role.competencies[side[0]].name, q: "Both are good. Which is more you?", answer: side[2], score: side[1], signal: SIGNAL(side[1]), other: other[2], best: (q.a[1] >= q.b[1] ? q.a : q.b)[2], why: whyFor(role, q), options });
   });
   role.scenarios.forEach(q => {
-    const pick = answers[q.id]; if (pick == null) return;
-    const o = q.opts[pick]; if (!o) return;
+    const raw = answers[q.id]; if (raw == null) return;
+    const mi = (raw && typeof raw === "object") ? raw.m : raw, li = (raw && typeof raw === "object") ? raw.l : null;
+    const o = q.opts[mi]; if (!o) return;
+    const lo = li != null ? q.opts[li] : null;
     const best = q.opts.slice().sort((x, y) => y.score - x.score)[0];
-    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, flag: x.flag || "", positive: x.positive || "", interp: x.interp || "", reason: x.reason || "", signal: x.interp || SIGNAL(x.score) }));
-    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, title: q.title || "", construct: q.construct || "", q: q.text, answer: o.text, score: o.score, signal: o.interp || SIGNAL(o.score), reason: o.reason || "", best: best.i === o.i ? "" : best.text, flag: o.flag || "", positive: o.positive || "", why: whyFor(role, q), miss: q.miss || "", options, edited: !!q.edited });
+    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, least: !!lo && x.i === lo.i, flag: x.flag || "", positive: x.positive || "", interp: x.interp || "", reason: x.reason || "", signal: x.interp || SIGNAL(x.score) }));
+    const leastScore = lo ? 100 - lo.score : null;
+    const leastSignal = !lo ? "" : lo.score <= 10 ? "Correctly ruled out the riskiest move" : lo.score >= 95 ? "Ruled out the strongest move" : "Ruled out a " + String(lo.interp || SIGNAL(lo.score)).toLowerCase() + " option";
+    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, title: q.title || "", construct: q.construct || "", q: q.text, answer: o.text, score: o.score, signal: o.interp || SIGNAL(o.score), reason: o.reason || "", best: best.i === o.i ? "" : best.text, flag: o.flag || "", positive: o.positive || "", why: whyFor(role, q), miss: q.miss || "", options, edited: !!q.edited, least: lo ? lo.text : "", leastScore, leastSignal, twoPick: !!role.twoPick });
   });
   role.worst.forEach(q => {
     const pick = answers[q.id]; if (pick == null) return;
@@ -626,8 +630,19 @@ export function itemEvidence(role, answers) {
   return out;
 }
 
-export function score(role, answers, settings) {
+export function score(role, answers, settings, meta) {
   const st = normalizeSettings(role, settings);
+  // Pace: time per item recorded by the candidate's browser. Too fast to have read the items → the report is marked unreliable.
+  const times = (meta && meta.times) || null;
+  let pace = null;
+  if (times) {
+    const vals = scoredItems(role).map(q => Number(times[q.id])).filter(x => x > 0 && isFinite(x)).sort((a, b) => a - b);
+    if (vals.length >= 8) {
+      const total = vals.reduce((a, c) => a + c, 0), median = vals[Math.floor(vals.length / 2)];
+      const perItemFloor = role.twoPick ? 9000 : 6000;
+      pace = { n: vals.length, totalMin: Math.round(total / 6000) / 10, medianSec: Math.round(median / 1000), tooFast: median < perItemFloor || total / vals.length < perItemFloor * 1.3 };
+    }
+  }
   const items = itemEvidence(role, answers);
   const byId = Object.fromEntries(items.map(it => [it.id, it]));
   const buckets = {};
@@ -651,13 +666,21 @@ export function score(role, answers, settings) {
   });
 
   role.scenarios.forEach(q => {
-    const pick = answers[q.id];
-    if (pick == null) return;
-    const opt = q.opts[pick];
+    const raw = answers[q.id];
+    if (raw == null) return;
+    const mi = (raw && typeof raw === "object") ? raw.m : raw, li = (raw && typeof raw === "object") ? raw.l : null;
+    const opt = q.opts[mi];
     if (!opt) return;
     add(q.comp, opt.score);
     (scenBuckets[q.comp] = scenBuckets[q.comp] || []).push(opt.score);
     const ev = byId[q.id] || {};
+    // Two-pick items: the least-likely choice scores too (100 minus that option's value). Ruling out the benchmark is a flag in its own right.
+    const lo = li != null ? q.opts[li] : null;
+    if (lo) {
+      add(q.comp, 100 - lo.score);
+      (scenBuckets[q.comp] = scenBuckets[q.comp] || []).push(100 - lo.score);
+      if (lo.score >= 95) redFlags.push({ comp: q.comp, label: "Ruled out the strongest move as something they would never do", qid: q.id, severity: "meaningful", context: q.text, chosen: "Least likely: " + lo.text, better: "", score: 100 - lo.score, why: ev.why || "" });
+    }
     if (opt.flag) redFlags.push({
       comp: q.comp, label: opt.flag, qid: q.id,
       severity: opt.score <= 10 ? "critical" : opt.score <= 30 ? "meaningful" : "minor",
@@ -723,6 +746,8 @@ export function score(role, answers, settings) {
       evidence: items.filter(it => it.comp === comp && (it.kind === "likert" || it.kind === "scenario" || it.kind === "worst")).map(brief),
     });
   });
+  if (pace && pace.tooFast)
+    consistency.push({ t: "Answered " + pace.n + " items in " + pace.totalMin + " minutes (median " + pace.medianSec + "s each) \u2014 too fast to have read them. Treat this report as unreliable rather than as a result; a retake or the interview should settle it.", evidence: [], speed: true });
   const criticalBreaches = comps.filter(c => c.critical && c.breach);
   if (criticalBreaches.length && overall >= st.thresholds.pass)
     consistency.push({
@@ -771,7 +796,7 @@ export function score(role, answers, settings) {
     };
   });
 
-  const scen = role.scenarios.map(q => answers[q.id] != null && q.opts[answers[q.id]] ? q.opts[answers[q.id]].score : null).filter(v => v != null);
+  const scen = role.scenarios.map(q => { const raw = answers[q.id]; const mi = (raw && typeof raw === "object") ? raw.m : raw; return mi != null && q.opts[mi] ? q.opts[mi].score : null; }).filter(v => v != null);
   const scenAvg = scen.length ? Math.round(scen.reduce((a, b) => a + b, 0) / scen.length) : 0;
   const eliteCount = scen.filter(v => v >= 95).length;
   const weakCount = scen.filter(v => v <= 30).length;
@@ -783,8 +808,8 @@ export function score(role, answers, settings) {
     scenario: { avg: scenAvg, answered: scen.length, total: role.scenarios.length, elite: eliteCount, weak: weakCount },
     references: role.behavioral,
     items,
-    insights,
-    pilot: !!role.pilot, pilotNote: role.pilotNote || "", version: role.version || "",
+    insights, pace,
+    pilot: !!role.pilot, pilotNote: role.pilotNote || "", version: role.version || "", twoPick: !!role.twoPick,
     engine: 3,
   };
 }
@@ -814,7 +839,13 @@ export function demoAnswers(role, profile) {
     const ranked = q.opts.map(o => o.i).sort((x, y) => q.opts[y].score - q.opts[x].score);
     const r = rnd();
     const idx = q.comp === weakComp ? (r < 0.5 ? 3 : 2) : r < bias ? 0 : r < bias + 0.2 ? 1 : r < bias + 0.32 ? 2 : 3;
-    out[q.id] = ranked[Math.min(idx, ranked.length - 1)];
+    const m = ranked[Math.min(idx, ranked.length - 1)];
+    if (role.twoPick && q.kind === "scenario") {
+      // least-likely pick: the real worst for strong takers, a middling option otherwise
+      const li = rnd() < bias ? ranked.length - 1 : ranked.length - 2;
+      const l = ranked[li] === m ? ranked[Math.max(0, li - 1)] : ranked[li];
+      out[q.id] = { m, l };
+    } else out[q.id] = m;
   });
   return out;
 }

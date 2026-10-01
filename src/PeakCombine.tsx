@@ -9,9 +9,9 @@ import { LIVE_ENABLED, LiveStore, sb, fmtDate, fmtT, whenTxt, TZ_OPTIONS, TZ_SHO
 import { DEFAULT_SCHOOLS, DEFAULT_TA_STAGES, DEFAULT_CALL_PROMPT, FIRST_CALL_KIND, GRADE_COLOR, UTM_KEYS, CHANNEL_LINKS, slugify, sourceLabel } from './data/defaults';
 
 const STORAGE_KEY = 'peak-sales-combine-v3';
-const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr', 'resumeMsg', 'caseMsg', 'pub', 'schoolsDraft', 'stagesDraft', 'remindMsg', 'posting', 'postMsg']; // never persisted
+const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr', 'resumeMsg', 'caseMsg', 'pub', 'schoolsDraft', 'stagesDraft', 'remindMsg', 'posting', 'postMsg', 'bkTemp']; // never persisted
 const UI_KEYS = ['blind', 'weightsRole', 'vPeriod']; // the only local state kept between visits in live mode
-const CAND_KEYS = ['done', 'ack', 'challenge', 'app', 'ev', 'bkIdx', 'bkAns', 'bkIntroSeen', 'caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'infoDone']; // candidate progress synced to the database
+const CAND_KEYS = ['done', 'ack', 'challenge', 'app', 'ev', 'bkIdx', 'bkAns', 'bkIntroSeen', 'bkTimes', 'caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'infoDone']; // candidate progress synced to the database
 const COMBINE_KEYS = ['caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'done']; // the subset a combine link may change
 const DEFAULT_ROLE = 'Entry Level Sales Professional';
 const TR_KINDS = [FIRST_CALL_KIND, 'Mock pitch (Exercise A)', 'Interview', 'Other'];
@@ -37,7 +37,7 @@ function saveState(s: any) {
 }
 
 export class PeakCombine extends React.Component<any, any> {
-  _t: any; live: any; token: any; combineToken: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any; publicKind: any; publicToken: any; utm: any;
+  _t: any; live: any; token: any; combineToken: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any; publicKind: any; publicToken: any; utm: any; _bkShownAt: any;
   constructor(props: any) {
     super(props);
     const saved = loadState();
@@ -54,7 +54,7 @@ export class PeakCombine extends React.Component<any, any> {
     app: {name:'',email:'',phone:'',loc:'',school:'',program:'',linkedin:'',role:DEFAULT_ROLE,auth:null,resume:false,consent:false},
     ev: ['','','','',''],
     infoDone: false, resumeMsg: '', caseMsg: '', caseFile: null,
-    bkIdx: 0, bkAns: {}, bkIntroSeen: {}, bankSettings: null,
+    bkIdx: 0, bkAns: {}, bkIntroSeen: {}, bkTimes: {}, bkTemp: null, bankSettings: null,
     recorded: false,
     caseAns: ['','','','','','',''], caseMode: 'Written',
     timer: {sec:0,total:1,on:false},
@@ -122,10 +122,20 @@ export class PeakCombine extends React.Component<any, any> {
     this.utm = saved;
   }
   utmQuery() { const q = new URLSearchParams(); UTM_KEYS.forEach(k => { if (this.utm && this.utm[k]) q.set(k, this.utm[k]); }); const s = q.toString(); return s ? '&' + s : ''; }
+  // Public URLs. In production the app is served at "/" for every path (Vercel rewrites), so links always go to the root.
+  isHarness() { return /\.html$/i.test(window.location.pathname); }
+  publicUrl(kind, token) {
+    const utm = this.utmQuery();
+    if (this.isHarness()) return window.location.pathname + '?live=1&' + (kind === 'careers' ? 'careers=1' : kind + '=' + token) + utm;
+    if (kind === 'careers') return '/careers' + (utm ? '?' + utm.slice(1) : '');
+    return '/?' + kind + '=' + token + utm;
+  }
   initLive() {
     const q = new URLSearchParams(window.location.search);
     this.captureUtm(q);
-    if (q.has('careers') || /^\/careers\/?$/i.test(window.location.pathname)) { this.publicKind = 'careers'; this.setState({mode:'public'}); this.openCareers(); return; }
+    // A job / candidate token wins over the path, so /careers?apply=TOKEN (links from the previous build) still opens the job.
+    const hasToken = q.get('invite') || q.get('combine') || q.get('apply') || q.get('board');
+    if (!hasToken && (q.has('careers') || /^\/careers\/?$/i.test(window.location.pathname))) { this.publicKind = 'careers'; this.setState({mode:'public'}); this.openCareers(); return; }
     const token = q.get('invite');
     if (token) { this.token = token; this.setState({mode:'candidate', invite:'loading', viewAs:null}); this.openCandidate(token); return; }
     const ctoken = q.get('combine');
@@ -524,7 +534,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.setLoginPw = e => this.setState({login:{...this.state.login, pw:e.target.value, err:''}});
     v.signIn = () => { const em = this.state.login.email.trim().toLowerCase(); const u = users.find(x => x.email.toLowerCase() === em); if (!u) this.setState({login:{...this.state.login, err: em ? 'No staff account for that email. Candidates: use the link in your invitation email.' : 'Enter your work email.'}}); else if (this.state.deactivated[u.id]) this.setState({login:{...this.state.login, err:'This account has been deactivated. Contact the admin.'}}); else this.signInAs(u.id); };
     v.demoUsers = users.map(u => ({name: u.name + ' · ' + u.title, rolesTxt: u.roles.map(roleLabel).join(' + '), go: () => this.signInAs(u.id)}));
-    v.careersLink = LIVE_ENABLED ? (window.location.pathname === '/' ? '/careers' : window.location.pathname + '?live=1&careers=1') : '';
+    v.careersLink = LIVE_ENABLED ? (this.isHarness() ? window.location.pathname + '?live=1&careers=1' : '/careers') : '';
     v.openInvite = () => this.setState({mode:'candidate', invite:'valid', viewAs:null});
     v.openExpired = () => this.setState({mode:'candidate', invite:'expired', resent:false, viewAs:null});
     v.notResent = !st.resent; v.resent = st.resent; v.resend = () => this.setState({resent:true});
@@ -677,18 +687,31 @@ export class PeakCombine extends React.Component<any, any> {
     const bkItem = bkFlow[bkI] || {};
     const bkCur = st.bkAns[bkItem.id];
     v.bkNum = bkI + 1; v.bkTotal = bkTotal; v.bkPct = Math.round(bkI / bkTotal * 100) + '%';
-    v.bkKindLabel = ({likert:'How true is this of you?', pair:'Both are good. Which is more you?', scenario:'What would you actually do?', worst:'Which is the worst move?', insight:'How do you work best?'})[bkItem.kind] || 'Sales decisions';
+    const twoPick = !!(bkProf && bkProf.twoPick) && bkItem.kind === 'scenario';
+    const firstPicked = twoPick && st.bkTemp != null;
+    v.bkKindLabel = twoPick ? (firstPicked ? 'And which would you be least likely to do?' : 'Which would you most likely do?') : (({likert:'How true is this of you?', pair:'Both are good. Which is more you?', scenario:'What would you actually do?', worst:'Which is the worst move?', insight:'How do you work best?'})[bkItem.kind] || 'Sales decisions');
+    v.bkStepHint = twoPick ? (firstPicked ? 'Tap your first pick again to change it.' : 'Two picks per scenario: your most likely move first, then your least likely.') : '';
     v.bkNotScored = bkItem.kind === 'insight';
     v.bkHasText = bkItem.kind !== 'pair' && !!bkItem.text; v.bkText = bkItem.text || '';
     v.bkIsLikert = bkItem.kind === 'likert'; v.bkIsPair = bkItem.kind === 'pair'; v.bkIsChoice = bkItem.kind === 'scenario' || bkItem.kind === 'worst' || bkItem.kind === 'insight';
-    const bkPick = val => { const a = {...this.state.bkAns, [bkItem.id]: val}; const nx = bkI + 1; if (nx >= bkTotal) this.setState({bkAns:a, bkIdx:bkTotal, done:{...this.state.done, s3:true, s4:true}, cview:'finished'}); else this.setState({bkAns:a, bkIdx:nx}); };
+    const recordTime = () => { const now = Date.now(); const t0 = this._bkShownAt || now; const times = {...(this.state.bkTimes || {})}; times[bkItem.id] = Math.min(600000, (times[bkItem.id] || 0) + Math.max(0, now - t0)); this._bkShownAt = now; return times; };
+    const bkPick = val => {
+      if (twoPick) {
+        const tmp = this.state.bkTemp;
+        if (tmp == null) { this.setState({bkTemp: val}); return; }
+        if (val === tmp) { this.setState({bkTemp: null}); return; }
+        val = {m: tmp, l: val};
+      }
+      const a = {...this.state.bkAns, [bkItem.id]: val}; const times = recordTime(); const nx = bkI + 1;
+      if (nx >= bkTotal) this.setState({bkAns:a, bkTimes:times, bkTemp:null, bkIdx:bkTotal, done:{...this.state.done, s3:true, s4:true}, cview:'finished'}); else this.setState({bkAns:a, bkTimes:times, bkTemp:null, bkIdx:nx});
+    };
     const selSty = on => ({bg: on ? 'rgba(16,185,129,.16)' : '#0B120E', border: on ? 'rgba(16,185,129,.6)' : 'rgba(160,190,170,.2)', fg: on ? GL : '#D5DED7'});
     v.bkScale = ['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'].map((label, k) => ({label, ...selSty(bkCur === k + 1), on: () => bkPick(k + 1)}));
     v.bkPair = bkItem.kind === 'pair' ? [['a', bkItem.a[2]], ['b', bkItem.b[2]]].map(([side, text]) => ({text, ...selSty(bkCur === side), on: () => bkPick(side)})) : [];
-    v.bkOpts = v.bkIsChoice ? (bkItem.kind === 'insight' ? bkItem.opts : B.shuffled(bkItem.opts, bkI * 7 + 13)).map((o, k) => ({letter:'ABCD'[k], text:o.text, ...selSty(bkCur === o.i), on: () => bkPick(o.i)})) : [];
-    v.bkCanBack = bkI > 0 && !done.s3; v.bkBack = () => this.setState({bkIdx: Math.max(0, this.state.bkIdx - 1)});
+    v.bkOpts = v.bkIsChoice ? (bkItem.kind === 'insight' ? bkItem.opts : B.shuffled(bkItem.opts, bkI * 7 + 13)).map((o, k) => ({letter:'ABCD'[k], text:o.text, ...selSty(twoPick ? st.bkTemp === o.i : bkCur === o.i), tag: twoPick && st.bkTemp === o.i ? 'Most likely' : '', on: () => bkPick(o.i)})) : [];
+    v.bkCanBack = bkI > 0 && !done.s3; v.bkBack = () => this.setState({bkIdx: Math.max(0, this.state.bkIdx - 1), bkTemp: null});
     // an intro screen the first time each question format appears, so the switch between formats is explicit
-    const kindIntro = {likert:{title:'Self-assessment', kicker:'How true is this of you?', body:'Rate each statement on a five-point scale. Answer for how you actually operate, not how you would like to. Your ratings are read alongside your scenario choices, so honesty is the only strategy that works.', noun:'statements'}, pair:{title:'Forced choice', kicker:'Both are good. Which is more you?', body:'Two legitimate options each time \u2014 neither is wrong. Pick the one that is more true of you.', noun:'pairs'}, scenario:{title:'Scenarios', kicker:'What would you actually do?', body:'A real situation from the job and four responses. Choose the one closest to what you would genuinely do \u2014 not the textbook answer.', noun:'scenarios'}, worst:{title:'Worst move', kicker:'Which is the worst move?', body:'This part flips the question. Of the four actions, pick the ONE you would never take \u2014 the most damaging move in that situation.', noun:'situations'}, insight:{title:'Working style', kicker:'Three quick questions about how you like to be managed.', body:'These are not scored and never affect the hiring decision. They help your future manager set up onboarding, feedback, and check-ins the way you work best.', noun:'questions'}};
+    const kindIntro = {likert:{title:'Self-assessment', kicker:'How true is this of you?', body:'Rate each statement on a five-point scale. Answer for how you actually operate, not how you would like to. Your ratings are read alongside your scenario choices, so honesty is the only strategy that works.', noun:'statements'}, pair:{title:'Forced choice', kicker:'Both are good. Which is more you?', body:'Two legitimate options each time \u2014 neither is wrong. Pick the one that is more true of you.', noun:'pairs'}, scenario:(bkProf && bkProf.twoPick) ? {title:'Scenarios', kicker:'Two picks each time.', body:'A real situation from the job and four responses. First pick the one closest to what you would actually do, then the one you would be least likely to do. Every option has a cost \u2014 there is no \u201cdo everything\u201d answer, and both picks count.', noun:'scenarios'} : {title:'Scenarios', kicker:'What would you actually do?', body:'A real situation from the job and four responses. Choose the one closest to what you would genuinely do \u2014 not the textbook answer.', noun:'scenarios'}, worst:{title:'Worst move', kicker:'Which is the worst move?', body:'This part flips the question. Of the four actions, pick the ONE you would never take \u2014 the most damaging move in that situation.', noun:'situations'}, insight:{title:'Working style', kicker:'Three quick questions about how you like to be managed.', body:'These are not scored and never affect the hiring decision. They help your future manager set up onboarding, feedback, and check-ins the way you work best.', noun:'questions'}};
     const groupStart = bkI === 0 || (bkFlow[bkI - 1] || {}).kind !== bkItem.kind;
     let runLen = 0; for (let k = bkI; k < bkFlow.length && bkFlow[k].kind === bkItem.kind; k++) runLen++;
     const ki = kindIntro[bkItem.kind] || kindIntro.scenario;
@@ -898,8 +921,8 @@ export class PeakCombine extends React.Component<any, any> {
     const rp = reportFor(p);
     const sigColor = s => s >= 95 ? G : s >= 70 ? GL : s >= 45 ? '#A7B5AB' : s >= 20 ? AMB : RED;
     const kindLabel = k => ({likert:'Self-rating', pair:'Forced choice', scenario:'Scenario', worst:'Worst move'})[k] || k;
-    const evRow = it => ({q:it.q, title:it.title || '', answer:it.answer, signal:it.signal, score:it.score, best:it.best || '', color: sigColor(it.score), kind: kindLabel(it.kind), why: it.why || '', miss: it.miss || '', reason: it.reason || '', options: (it.options || []).map(o => ({text:o.text, score:o.score, signal:o.signal, reason:o.reason || '', chosen:!!o.chosen, flag:o.flag || '', positive:o.positive || '', color: sigColor(o.score), weight: o.chosen ? '800' : '400'}))});
-    v.rpScaleNote = B ? B.SCALE_NOTE : '';
+    const evRow = it => ({q:it.q, title:it.title || '', answer:it.answer, signal:it.signal, score:it.score, best:it.best || '', color: sigColor(it.score), kind: kindLabel(it.kind), why: it.why || '', miss: it.miss || '', reason: it.reason || '', least: it.least || '', leastScore: it.leastScore, leastSignal: it.leastSignal || '', leastColor: it.leastScore != null ? sigColor(it.leastScore) : '#7E9186', options: (it.options || []).map(o => ({text:o.text, score:o.score, signal:o.signal, reason:o.reason || '', chosen:!!o.chosen, least:!!o.least, flag:o.flag || '', positive:o.positive || '', color: sigColor(o.score), weight: (o.chosen || o.least) ? '800' : '400'}))});
+    v.rpScaleNote = (rp && rp.prof && rp.prof.scaleNote) || (B ? B.SCALE_NOTE : '');
     v.pHasReport = !!rp;
     const bandColor = b => b === 'Strong match' ? G : b === 'Meets profile' ? GL : b === 'Validate in interview' ? AMB : b === 'Below profile' ? '#F0A070' : RED;
     const sevSty = s => s === 'critical' ? {bg:RED, fg:'#04120B'} : s === 'meaningful' ? {bg:AMB, fg:'#04120B'} : {bg:'rgba(160,190,170,.18)', fg:'#D5DED7'};
@@ -907,6 +930,8 @@ export class PeakCombine extends React.Component<any, any> {
       const r = rp.res;
       v.rpOverall = r.overall; v.rpBand = r.band; v.rpColor = bandColor(r.band); v.rpNote = r.bandNote;
       v.rpProfile = rp.prof.name + (rp.prof.version ? ' ' + rp.prof.version : '') + ' profile · ' + rp.prof.tag; v.rpProfName = rp.prof.name;
+      v.rpPace = r.pace ? ('Completed in ' + r.pace.totalMin + ' min \u00b7 median ' + r.pace.medianSec + 's per item' + (r.twoPick ? ' \u00b7 two picks per scenario' : '')) : (r.twoPick ? 'Two picks per scenario' : '');
+      v.rpTooFast = !!(r.pace && r.pace.tooFast);
       v.rpPilot = !!r.pilot; v.rpPilotNote = r.pilotNote || ''; v.rpInsights = (r.insights || []).map(x => ({title:x.title, q:x.q, answer:x.answer})); v.rpHasInsights = !!(r.insights && r.insights.length);
       v.rpScen = r.scenario.answered + '/' + r.scenario.total + ' scenarios · avg ' + r.scenario.avg + ' · ' + r.scenario.elite + ' elite · ' + r.scenario.weak + ' weak';
       v.rpComps = r.comps.map(c => { const col = c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? '#E9D9B0' : AMB; return {name:c.name, meta:(c.critical ? '★ ' : '') + c.weight + '%' + (c.breach ? ' · below floor ' + c.floor : ''), scoreTxt: c.scored ? String(c.score) : 'off', color: c.scored ? col : '#5C6B61', pct: (c.scored ? c.score : 0) + '%', floorPct: c.floor + '%'}; });
@@ -924,7 +949,7 @@ export class PeakCombine extends React.Component<any, any> {
       v.rpItemCount = (r.items || []).length;
       v.rpItemsOpen = !!st.rpItemsOpen; v.toggleItems = () => this.setState({rpItemsOpen: !this.state.rpItemsOpen});
       v.rpItemsBtn = st.rpItemsOpen ? 'Hide the answer trail' : 'Show every answer (' + v.rpItemCount + ')';
-    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; v.rpItemGroups = []; v.rpHasEvidence = false; v.rpItemsOpen = false; v.rpPilot = false; v.rpInsights = []; v.rpHasInsights = false; }
+    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; v.rpItemGroups = []; v.rpHasEvidence = false; v.rpItemsOpen = false; v.rpPilot = false; v.rpInsights = []; v.rpHasInsights = false; v.rpPace = ''; v.rpTooFast = false; }
     const lvColors = {High:[GL,'rgba(16,185,129,.12)'], Medium:['#E9D9B0','rgba(245,184,74,.1)'], Low:[AMB,'rgba(245,184,74,.12)'], '\u2014':['#5C6B61','transparent'], 'In review':['#8FA396','rgba(160,190,170,.08)'], Insufficient:['#5C6B61','transparent']};
     if (p.comp) {
       v.pBars = D.comps.map(c => { const val = p.comp[c.id]; const has = val != null; return {name:c.name, valTxt: has ? val.toFixed(1) : '\u2014', valColor: !has ? '#5C6B61' : val>=3.5 ? GL : val>=2.8 ? '#E9F0EA' : AMB, pct: has ? Math.round(val/5*100)+'%' : '0%', fill: val>=3.5 ? 'linear-gradient(90deg,rgba(16,185,129,.5),#10B981)' : 'linear-gradient(90deg,rgba(245,184,74,.4),#F5B84A)'}; });
@@ -1040,7 +1065,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.bankWhy = cur ? cur.why : ''; v.setBankWhy = e => setDraft(d => { d.why = e.target.value; });
     v.bankOpts = cur ? cur.opts.map((o, i) => ({letter:'ABCD'[i], text:o.text, score:String(o.score), signal: (bq.opts[i] && bq.opts[i].interp && Number(o.score) === bq.opts[i].score) ? bq.opts[i].interp : B.SIGNAL(Number(o.score) || 0), reason: (bq.opts[i] && bq.opts[i].reason) || '', color: sigColor(Number(o.score) || 0), flag:o.flag, positive:o.positive,
       setText: e => setDraft(d => { d.opts[i].text = e.target.value; }), setScore: e => setDraft(d => { d.opts[i].score = e.target.value; }), setFlag: e => setDraft(d => { d.opts[i].flag = e.target.value; }), setPositive: e => setDraft(d => { d.opts[i].positive = e.target.value; })})) : [];
-    v.bankScaleNote = B ? B.SCALE_NOTE : '';
+    v.bankScaleNote = (bkRole && bkRole.scaleNote) || (B ? B.SCALE_NOTE : '');
     v.saveBank = () => { if (!draft || !bq) return; const clean = {text: draft.text, why: draft.why, opts: draft.opts.map(o => ({text:o.text, score: Math.max(0, Math.min(100, Math.round(Number(o.score) || 0))), flag:o.flag || '', positive:o.positive || ''}))}; const all = {...(this.state.bankEdits || {})}; all[bkPid] = {...(all[bkPid] || {}), [bq.id]: clean}; this.setState({bankEdits:all, bankDraft:null, bankSaved:'Saved \u2014 applies to every candidate scored from now on. Reports already on file keep their numbers until you re-score them from the profile.'}); };
     v.revertBank = () => { if (!bq) return; const all = {...(this.state.bankEdits || {})}; const forP = {...(all[bkPid] || {})}; delete forP[bq.id]; all[bkPid] = forP; this.setState({bankEdits:all, bankDraft:null, bankSaved:'Reverted to the original wording and scores.'}); };
     v.bankSavedNote = st.bankSaved || '';
@@ -1177,7 +1202,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.postOn = !!(selJob && selJob.posted); v.togglePosted = () => this.togglePosted(selJob); v.postMsg = st.postMsg || '';
     v.postStatusTxt = !selJob ? '' : selJob.posted ? (selJob.status === 'Open' && selJob.applyEnabled ? 'Listed on the careers page' : 'Marked as posted, but hidden because the job is ' + (selJob.status !== 'Open' ? selJob.status.toLowerCase() : 'not accepting applications')) : 'Not on the careers page';
     v.postStatusColor = selJob && selJob.posted && selJob.status === 'Open' && selJob.applyEnabled ? GL : selJob && selJob.posted ? AMB : '#7E9186';
-    const careersUrl = () => window.location.origin + (window.location.pathname === '/' ? '/careers' : window.location.pathname + '?live=1&careers=1');
+    const careersUrl = () => window.location.origin + (this.isHarness() ? window.location.pathname + '?live=1&careers=1' : '/careers');
     v.careersUrl = careersUrl();
     const jobSlug = selJob ? slugify(selJob.title + ' ' + selJob.program) : '';
     v.channelLinks = selJob ? CHANNEL_LINKS.map(ch => { const url = selJob.applyLink + '&' + ch.q + '&utm_campaign=' + jobSlug; return {id:ch.id, label:ch.label, url, copy: () => this.copyBoardLink(url)}; }) : [];
@@ -1354,8 +1379,8 @@ export class PeakCombine extends React.Component<any, any> {
       v.pubKind = this.publicKind; v.pubLoading = pb.status === 'loading'; v.pubInvalid = pb.status === 'invalid'; v.pubClosed = pb.status === 'closed'; v.pubOk = pb.status === 'ok'; v.pubDone = pb.status === 'done';
       v.pubTitle = job.title || ''; v.pubProgram = job.program || ''; v.pubMsg = pb.msg || ''; v.pubBusy = !!pb.busy; v.pubLink = pb.link || '';
       v.pubFacts = [job.location, job.employment_type, job.comp].filter(Boolean); v.pubDesc = job.description || '';
-      v.careersHref = window.location.pathname === '/' ? '/careers' + (this.utmQuery() ? '?' + this.utmQuery().slice(1) : '') : window.location.pathname + '?live=1&careers=1' + this.utmQuery();
-      const jobHref = t => (window.location.pathname === '/' ? '/?apply=' : window.location.pathname + '?live=1&apply=') + t + this.utmQuery();
+      v.careersHref = this.publicUrl('careers');
+      const jobHref = t => this.publicUrl('apply', t);
       const excerpt = s => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > 220 ? t.slice(0, 217).replace(/\s+\S*$/, '') + '\u2026' : t; };
       v.pubJobs = (pd.jobs || []).map(j => ({title:j.title, program:j.program || '', facts:[j.location, j.employment_type, j.comp].filter(Boolean).join(' \u00b7 '), excerpt: excerpt(j.description), href: jobHref(j.apply_token)}));
       v.pubNoJobs = v.pubKind === 'careers' && pb.status === 'ok' && !v.pubJobs.length;
@@ -1384,6 +1409,7 @@ export class PeakCombine extends React.Component<any, any> {
     if (!LIVE_ENABLED || this.hydrating || !prevState) return;
     const st = this.state;
     if (st.mode === 'candidate' && (this.token || this.combineToken) && st.invite === 'valid') {
+      if (st.cview === 's3' && (prevState.bkIdx !== st.bkIdx || prevState.cview !== 's3' || prevState.bkIntroSeen !== st.bkIntroSeen)) this._bkShownAt = Date.now();
       const keys = this.combineToken ? COMBINE_KEYS : CAND_KEYS;
       const patch = {}; let n = 0;
       keys.forEach(k => { if (prevState[k] !== st[k]) { patch[k] = st[k]; n++; } });

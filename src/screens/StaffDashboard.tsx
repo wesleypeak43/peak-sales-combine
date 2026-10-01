@@ -446,7 +446,10 @@ export function StaffDashboard({ V }: { V: any }) {
                     <div style={{marginTop: "10px", fontSize: "12px", color: "#E9D9B0", lineHeight: "1.55", background: "rgba(245,184,74,.07)", border: "1px solid rgba(245,184,74,.3)", borderRadius: "10px", padding: "10px 12px"}}>{V.rpPilotNote}</div>
                   </>) : null}
                   <div style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", letterSpacing: ".08em", textTransform: "uppercase", color: "#5C6B61", marginTop: "12px", lineHeight: "1.5"}}>{V.rpProfile}</div>
-                  <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "4px"}}>{V.rpScen}</div>
+                  <div style={{fontSize: "11.5px", color: "#5C6B61", marginTop: "4px"}}>{V.rpScen}{V.rpPace ? " · " + V.rpPace : ""}</div>
+                  {V.rpTooFast ? (<>
+                    <div style={{marginTop: "10px", fontSize: "12.5px", color: "#F87171", lineHeight: "1.55", background: "rgba(248,113,113,.07)", border: "1px solid rgba(248,113,113,.35)", borderRadius: "10px", padding: "10px 12px", fontWeight: "700"}}>Answered too quickly to have read the items — treat this report as unreliable, not as a result.</div>
+                  </>) : null}
                   {V.rpCanRescore ? (<>
                     <div style={{display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginTop: "14px"}}>
                       <button onClick={V.rescore} style={{background: "transparent", color: "#34D399", border: "1px solid rgba(16,185,129,.35)", borderRadius: "8px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer"}}>Re-score with current rubric</button>
@@ -605,7 +608,8 @@ export function StaffDashboard({ V }: { V: any }) {
                             {(g?.items ?? []).map((e: any, $i2: number) => (<React.Fragment key={$i2}>
                               <div style={{fontSize: "11.5px", lineHeight: "1.5", paddingLeft: "10px", borderLeft: `2px solid ${e?.color}`}}>
                                 <div style={{color: "#A7B5AB"}}><span style={{color: "#5C6B61"}}>{e?.kind}{" · "}</span>{e?.q}</div>
-                                <div><span style={{color: "#5C6B61"}}>Answer · </span><span style={{color: e?.color, fontWeight: "700"}}>{e?.answer}</span><span style={{color: "#5C6B61"}}>{" · "}{e?.signal}{" · "}{e?.score}</span></div>
+                                <div><span style={{color: "#5C6B61"}}>{e?.least ? "Most likely · " : "Answer · "}</span><span style={{color: e?.color, fontWeight: "700"}}>{e?.answer}</span><span style={{color: "#5C6B61"}}>{" · "}{e?.signal}{" · "}{e?.score}</span></div>
+                                {e?.least ? (<div><span style={{color: "#5C6B61"}}>Least likely · </span><span style={{color: e?.leastColor, fontWeight: "700"}}>{e?.least}</span><span style={{color: "#5C6B61"}}>{" · "}{e?.leastSignal}{" · "}{e?.leastScore}</span></div>) : null}
                                 {e?.best ? (<div><span style={{color: "#5C6B61"}}>Strongest option · </span><span style={{color: "#8FA396"}}>{e?.best}</span></div>) : null}
                                 {(e?.options ?? []).length ? (<>
                                   <div style={{marginTop: "6px", display: "flex", flexDirection: "column", gap: "2px"}}>
@@ -613,7 +617,7 @@ export function StaffDashboard({ V }: { V: any }) {
                                       <div style={{display: "flex", gap: "8px", alignItems: "baseline", color: o?.chosen ? "#E9F0EA" : "#7E9186", fontWeight: o?.weight}}>
                                         <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10.5px", color: o?.color, minWidth: "26px", textAlign: "right"}}>{o?.score}</span>
                                         <div style={{flex: "1"}}>
-                                          <div>{o?.chosen ? "▸ " : ""}{o?.text}{o?.flag ? <span style={{color: "#F0A070", fontWeight: "400"}}>{" · " + o.flag}</span> : null}{o?.positive ? <span style={{color: "#34D399", fontWeight: "400"}}>{" · " + o.positive}</span> : null}</div>
+                                          <div>{o?.chosen ? "▸ " : o?.least ? "▿ " : ""}{o?.text}{o?.least ? <span style={{color: "#7E9186", fontWeight: "400"}}>{" · least likely"}</span> : null}{o?.flag ? <span style={{color: "#F0A070", fontWeight: "400"}}>{" · " + o.flag}</span> : null}{o?.positive ? <span style={{color: "#34D399", fontWeight: "400"}}>{" · " + o.positive}</span> : null}</div>
                                           {o?.reason ? (<div style={{fontSize: "10.5px", color: "#5C6B61", fontWeight: "400", lineHeight: "1.45"}}>{o?.signal}{" — "}{o?.reason}</div>) : null}
                                         </div>
                                       </div>

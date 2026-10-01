@@ -222,6 +222,9 @@ export function CandidatePortal({ V }: { V: any }) {
           </div>
           <div style={KICKER}>{"Stage 03 · Sales Decisions · "}{V.bkNum}{" of "}{V.bkTotal}{V.bkNotScored ? " · not scored" : ""}</div>
           <h1 style={{...H1, margin: "0 0 16px", fontSize: "clamp(30px,8cqw,40px)"}}>{V.bkKindLabel}</h1>
+          {V.bkStepHint && !V.bkIntro ? (<>
+            <p style={{margin: "-8px 0 14px", fontSize: "12.5px", color: "#8FA396", lineHeight: "1.5"}}>{V.bkStepHint}</p>
+          </>) : null}
           <div style={{display: "flex", alignItems: "center", gap: "14px", marginBottom: "18px"}}>
             <div style={{flex: "1", height: "6px", background: "#121A15", borderRadius: "99px", overflow: "hidden"}}>
               <div style={{height: "100%", width: V.bkPct, background: "#10B981", borderRadius: "99px", transition: "width .3s"}} />
@@ -261,6 +264,7 @@ export function CandidatePortal({ V }: { V: any }) {
                 <button onClick={o?.on} style={{display: "flex", gap: "14px", alignItems: "center", background: o?.bg, border: `1px solid ${o?.border}`, borderRadius: "12px", padding: "16px 18px", color: o?.fg, fontSize: "14px", lineHeight: "1.5", textAlign: "left", cursor: "pointer", minHeight: "52px"}} className="ps1">
                   <span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "13px", fontWeight: "700", color: "#7E9186"}}>{o?.letter}</span>
                   <span style={{flex: "1"}}>{o?.text}</span>
+                  {o?.tag ? (<span style={{fontFamily: "'JetBrains Mono',monospace", fontSize: "10px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#04120B", background: "#10B981", borderRadius: "99px", padding: "4px 9px", whiteSpace: "nowrap"}}>{o?.tag}</span>) : null}
                 </button>
               </React.Fragment>))}
             </div>
