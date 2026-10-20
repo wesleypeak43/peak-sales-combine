@@ -1,8 +1,184 @@
+/* Theme variables. Every color in the UI is one of these; the dark values are the original palette, the light values its counterpart. */
+:root, [data-theme="dark"] {
+  --c-hex-080d0a: #080D0A;
+  --scheme: dark;
+  --c-hex-04120b: #04120B;
+  --c-hex-0b110d: #0B110D;
+  --c-hex-0b120e: #0B120E;
+  --c-hex-0e9f6e: #0E9F6E;
+  --c-hex-0f1611: #0F1611;
+  --c-hex-10b981: #10B981;
+  --c-hex-121a15: #121A15;
+  --c-hex-20302680: #20302680;
+  --c-hex-34d399: #34D399;
+  --c-hex-3a453d: #3A453D;
+  --c-hex-4a554d: #4A554D;
+  --c-hex-5b9bff: #5B9BFF;
+  --c-hex-5c6b61: #5C6B61;
+  --c-hex-7e9186: #7E9186;
+  --c-hex-8fa396: #8FA396;
+  --c-hex-a7b5ab: #A7B5AB;
+  --c-hex-d5ded7: #D5DED7;
+  --c-hex-e9d9b0: #E9D9B0;
+  --c-hex-e9f0ea: #E9F0EA;
+  --c-hex-f0a070: #F0A070;
+  --c-hex-f5b84a: #F5B84A;
+  --c-hex-f87171: #F87171;
+  --c-rgba-0-0-0-4: rgba(0,0,0,.4);
+  --c-rgba-0-0-0-45: rgba(0,0,0,.45);
+  --c-rgba-16-185-129-03: rgba(16,185,129,.03);
+  --c-rgba-16-185-129-035: rgba(16,185,129,.035);
+  --c-rgba-16-185-129-06: rgba(16,185,129,.06);
+  --c-rgba-16-185-129-07: rgba(16,185,129,.07);
+  --c-rgba-16-185-129-08: rgba(16,185,129,.08);
+  --c-rgba-16-185-129-09: rgba(16,185,129,.09);
+  --c-rgba-16-185-129-1: rgba(16,185,129,.1);
+  --c-rgba-16-185-129-12: rgba(16,185,129,.12);
+  --c-rgba-16-185-129-14: rgba(16,185,129,.14);
+  --c-rgba-16-185-129-16: rgba(16,185,129,.16);
+  --c-rgba-16-185-129-25: rgba(16,185,129,.25);
+  --c-rgba-16-185-129-28: rgba(16,185,129,.28);
+  --c-rgba-16-185-129-3: rgba(16,185,129,.3);
+  --c-rgba-16-185-129-35: rgba(16,185,129,.35);
+  --c-rgba-16-185-129-4: rgba(16,185,129,.4);
+  --c-rgba-16-185-129-45: rgba(16,185,129,.45);
+  --c-rgba-16-185-129-5: rgba(16,185,129,.5);
+  --c-rgba-16-185-129-55: rgba(16,185,129,.55);
+  --c-rgba-16-185-129-6: rgba(16,185,129,.6);
+  --c-rgba-160-190-170-04: rgba(160,190,170,.04);
+  --c-rgba-160-190-170-07: rgba(160,190,170,.07);
+  --c-rgba-160-190-170-08: rgba(160,190,170,.08);
+  --c-rgba-160-190-170-1: rgba(160,190,170,.1);
+  --c-rgba-160-190-170-12: rgba(160,190,170,.12);
+  --c-rgba-160-190-170-13: rgba(160,190,170,.13);
+  --c-rgba-160-190-170-14: rgba(160,190,170,.14);
+  --c-rgba-160-190-170-15: rgba(160,190,170,.15);
+  --c-rgba-160-190-170-16: rgba(160,190,170,.16);
+  --c-rgba-160-190-170-18: rgba(160,190,170,.18);
+  --c-rgba-160-190-170-2: rgba(160,190,170,.2);
+  --c-rgba-160-190-170-22: rgba(160,190,170,.22);
+  --c-rgba-160-190-170-25: rgba(160,190,170,.25);
+  --c-rgba-160-190-170-3: rgba(160,190,170,.3);
+  --c-rgba-160-190-170-45: rgba(160,190,170,.45);
+  --c-rgba-233-240-234-45: rgba(233,240,234,.45);
+  --c-rgba-233-240-234-5: rgba(233,240,234,.5);
+  --c-rgba-245-184-74-05: rgba(245,184,74,.05);
+  --c-rgba-245-184-74-06: rgba(245,184,74,.06);
+  --c-rgba-245-184-74-07: rgba(245,184,74,.07);
+  --c-rgba-245-184-74-09: rgba(245,184,74,.09);
+  --c-rgba-245-184-74-1: rgba(245,184,74,.1);
+  --c-rgba-245-184-74-12: rgba(245,184,74,.12);
+  --c-rgba-245-184-74-15: rgba(245,184,74,.15);
+  --c-rgba-245-184-74-3: rgba(245,184,74,.3);
+  --c-rgba-245-184-74-35: rgba(245,184,74,.35);
+  --c-rgba-245-184-74-4: rgba(245,184,74,.4);
+  --c-rgba-245-184-74-45: rgba(245,184,74,.45);
+  --c-rgba-245-184-74-5: rgba(245,184,74,.5);
+  --c-rgba-245-184-74-6: rgba(245,184,74,.6);
+  --c-rgba-248-113-113-07: rgba(248,113,113,.07);
+  --c-rgba-248-113-113-12: rgba(248,113,113,.12);
+  --c-rgba-248-113-113-14: rgba(248,113,113,.14);
+  --c-rgba-248-113-113-35: rgba(248,113,113,.35);
+  --c-rgba-248-113-113-4: rgba(248,113,113,.4);
+  --c-rgba-91-155-255-1: rgba(91,155,255,.1);
+  --c-rgba-91-155-255-3: rgba(91,155,255,.3);
+  --c-rgba-91-155-255-35: rgba(91,155,255,.35);
+  --c-rgba-91-155-255-45: rgba(91,155,255,.45);
+}
+[data-theme="light"] {
+  --c-hex-080d0a: #F4F6F3;
+  --scheme: light;
+  --c-hex-04120b: #FFFFFF;
+  --c-hex-0b110d: #FFFFFF;
+  --c-hex-0b120e: #F4F6F3;
+  --c-hex-0e9f6e: #0A5F3C;
+  --c-hex-0f1611: #FFFFFF;
+  --c-hex-10b981: #0F6B45;
+  --c-hex-121a15: #E4E9E5;
+  --c-hex-20302680: #C9D3CC80;
+  --c-hex-34d399: #0F6B45;
+  --c-hex-3a453d: #A8B1AB;
+  --c-hex-4a554d: #8A958E;
+  --c-hex-5b9bff: #1D4ED8;
+  --c-hex-5c6b61: #66736B;
+  --c-hex-7e9186: #5B6660;
+  --c-hex-8fa396: #5B6660;
+  --c-hex-a7b5ab: #44524A;
+  --c-hex-d5ded7: #2A3630;
+  --c-hex-e9d9b0: #6B4A12;
+  --c-hex-e9f0ea: #16201B;
+  --c-hex-f0a070: #A3410E;
+  --c-hex-f5b84a: #8F5208;
+  --c-hex-f87171: #B4261E;
+  --c-rgba-0-0-0-4: rgba(22,32,27,.4);
+  --c-rgba-0-0-0-45: rgba(22,32,27,.45);
+  --c-rgba-16-185-129-03: rgba(15,107,69,.03);
+  --c-rgba-16-185-129-035: rgba(15,107,69,.035);
+  --c-rgba-16-185-129-06: rgba(15,107,69,.06);
+  --c-rgba-16-185-129-07: rgba(15,107,69,.07);
+  --c-rgba-16-185-129-08: rgba(15,107,69,.08);
+  --c-rgba-16-185-129-09: rgba(15,107,69,.09);
+  --c-rgba-16-185-129-1: rgba(15,107,69,.1);
+  --c-rgba-16-185-129-12: rgba(15,107,69,.12);
+  --c-rgba-16-185-129-14: rgba(15,107,69,.14);
+  --c-rgba-16-185-129-16: rgba(15,107,69,.16);
+  --c-rgba-16-185-129-25: rgba(15,107,69,.25);
+  --c-rgba-16-185-129-28: rgba(15,107,69,.28);
+  --c-rgba-16-185-129-3: rgba(15,107,69,.3);
+  --c-rgba-16-185-129-35: rgba(15,107,69,.35);
+  --c-rgba-16-185-129-4: rgba(15,107,69,.4);
+  --c-rgba-16-185-129-45: rgba(15,107,69,.45);
+  --c-rgba-16-185-129-5: rgba(15,107,69,.5);
+  --c-rgba-16-185-129-55: rgba(15,107,69,.55);
+  --c-rgba-16-185-129-6: rgba(15,107,69,.6);
+  --c-rgba-160-190-170-04: rgba(22,32,27,.04);
+  --c-rgba-160-190-170-07: rgba(22,32,27,.07);
+  --c-rgba-160-190-170-08: rgba(22,32,27,.08);
+  --c-rgba-160-190-170-1: rgba(22,32,27,.1);
+  --c-rgba-160-190-170-12: rgba(22,32,27,.12);
+  --c-rgba-160-190-170-13: rgba(22,32,27,.13);
+  --c-rgba-160-190-170-14: rgba(22,32,27,.14);
+  --c-rgba-160-190-170-15: rgba(22,32,27,.15);
+  --c-rgba-160-190-170-16: rgba(22,32,27,.16);
+  --c-rgba-160-190-170-18: rgba(22,32,27,.18);
+  --c-rgba-160-190-170-2: rgba(22,32,27,.2);
+  --c-rgba-160-190-170-22: rgba(22,32,27,.22);
+  --c-rgba-160-190-170-25: rgba(22,32,27,.25);
+  --c-rgba-160-190-170-3: rgba(22,32,27,.3);
+  --c-rgba-160-190-170-45: rgba(22,32,27,.45);
+  --c-rgba-233-240-234-45: rgba(22,32,27,.45);
+  --c-rgba-233-240-234-5: rgba(22,32,27,.5);
+  --c-rgba-245-184-74-05: rgba(176,108,22,.05);
+  --c-rgba-245-184-74-06: rgba(176,108,22,.06);
+  --c-rgba-245-184-74-07: rgba(176,108,22,.07);
+  --c-rgba-245-184-74-09: rgba(176,108,22,.09);
+  --c-rgba-245-184-74-1: rgba(176,108,22,.1);
+  --c-rgba-245-184-74-12: rgba(176,108,22,.12);
+  --c-rgba-245-184-74-15: rgba(176,108,22,.15);
+  --c-rgba-245-184-74-3: rgba(176,108,22,.3);
+  --c-rgba-245-184-74-35: rgba(176,108,22,.35);
+  --c-rgba-245-184-74-4: rgba(176,108,22,.4);
+  --c-rgba-245-184-74-45: rgba(176,108,22,.45);
+  --c-rgba-245-184-74-5: rgba(176,108,22,.5);
+  --c-rgba-245-184-74-6: rgba(176,108,22,.6);
+  --c-rgba-248-113-113-07: rgba(180,38,30,.07);
+  --c-rgba-248-113-113-12: rgba(180,38,30,.12);
+  --c-rgba-248-113-113-14: rgba(180,38,30,.14);
+  --c-rgba-248-113-113-35: rgba(180,38,30,.35);
+  --c-rgba-248-113-113-4: rgba(180,38,30,.4);
+  --c-rgba-91-155-255-1: rgba(29,78,216,.1);
+  --c-rgba-91-155-255-3: rgba(29,78,216,.3);
+  --c-rgba-91-155-255-35: rgba(29,78,216,.35);
+  --c-rgba-91-155-255-45: rgba(29,78,216,.45);
+}
+[data-theme="light"] body { background: #F4F6F3; color: #16201B; }
+[data-theme="light"] select, [data-theme="light"] input, [data-theme="light"] textarea { color-scheme: light; }
+
 /* Hover / focus / active styles. Generated: inline styles carry the base look, these classes override on interaction. */
-.ps1:hover { border-color:#10B981 !important; }
-.ps2:hover { color:#E9F0EA !important; }
-.ps3:hover { border-color:#10B981 !important; color:#34D399 !important; }
-.ps4:hover { color:#F87171 !important; }
-.ps5:hover { color:#34D399 !important; }
-.ps6:hover { background:rgba(16,185,129,.03) !important; }
-.ps7:hover { color:#E9F0EA !important; border-color:rgba(160,190,170,.45) !important; }
+.ps1:hover { border-color:var(--c-hex-10b981) !important; }
+.ps2:hover { color:var(--c-hex-e9f0ea) !important; }
+.ps3:hover { border-color:var(--c-hex-10b981) !important; color:var(--c-hex-34d399) !important; }
+.ps4:hover { color:var(--c-hex-f87171) !important; }
+.ps5:hover { color:var(--c-hex-34d399) !important; }
+.ps6:hover { background:var(--c-rgba-16-185-129-03) !important; }
+.ps7:hover { color:var(--c-hex-e9f0ea) !important; border-color:var(--c-rgba-160-190-170-45) !important; }

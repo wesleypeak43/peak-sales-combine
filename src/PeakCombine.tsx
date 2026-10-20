@@ -6,14 +6,16 @@ import { Template } from './template/Template';
 import { PEAK_DATA } from './data/seed';
 import { PEAK_BANK } from './data/bank';
 import { LIVE_ENABLED, LiveStore, sb, fmtDate, fmtT, whenTxt, TZ_OPTIONS, TZ_SHORT } from './data/live';
-import { DEFAULT_SCHOOLS, DEFAULT_TA_STAGES, DEFAULT_CALL_PROMPT, FIRST_CALL_KIND, GRADE_COLOR, UTM_KEYS, CHANNEL_LINKS, slugify, sourceLabel } from './data/defaults';
+import { DEFAULT_SCHOOLS, DEFAULT_TA_STAGES, DEFAULT_CALL_PROMPT, FIRST_CALL_KIND, GRADE_COLOR, UTM_KEYS, CHANNEL_LINKS, slugify, sourceLabel, TA_STAGES, STAGE_NAMES, stageIndex, parseSchools, schoolNames, matchSchool, dupeGroups, normSchool } from './data/defaults';
+import { cityMatches, placeSearch } from './data/cities';
+const ENVX = (import.meta && import.meta.env) || {};
 
 const STORAGE_KEY = 'peak-sales-combine-v3';
-const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr', 'resumeMsg', 'caseMsg', 'pub', 'schoolsDraft', 'stagesDraft', 'remindMsg', 'posting', 'postMsg', 'bkTemp']; // never persisted
-const UI_KEYS = ['blind', 'weightsRole', 'vPeriod']; // the only local state kept between visits in live mode
+const TRANSIENT = ['timer', 'login', 'busy', 'flash', 'pw1', 'pw2', 'pwMsg', 'pwSetup', 'saveErr', 'resumeMsg', 'caseMsg', 'pub', 'schoolsDraft', 'stagesDraft', 'remindMsg', 'posting', 'postMsg', 'bkTemp', 'locFocus', 'locRemote', 'startDraft']; // never persisted
+const UI_KEYS = ['blind', 'weightsRole', 'vPeriod', 'theme']; // the only local state kept between visits in live mode
 const CAND_KEYS = ['done', 'ack', 'challenge', 'app', 'ev', 'bkIdx', 'bkAns', 'bkIntroSeen', 'bkTimes', 'caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'infoDone']; // candidate progress synced to the database
 const COMBINE_KEYS = ['caseAns', 'caseMode', 'caseFile', 'consentRec', 'accomSent', 'accomTxt', 'withdrawn', 'resched', 'done']; // the subset a combine link may change
-const DEFAULT_ROLE = 'Entry Level Sales Professional';
+const DEFAULT_ROLE = 'Account Executive';
 const TR_KINDS = [FIRST_CALL_KIND, 'Mock pitch (Exercise A)', 'Interview', 'Other'];
 
 function loadState() {
@@ -37,7 +39,7 @@ function saveState(s: any) {
 }
 
 export class PeakCombine extends React.Component<any, any> {
-  _t: any; live: any; token: any; combineToken: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any; publicKind: any; publicToken: any; utm: any; _bkShownAt: any;
+  _t: any; live: any; token: any; combineToken: any; candInfo: any; hydrating: any; pendingPatch: any; saveT: any; saveChain: any; settingsDirty: any; settingsT: any; pendingWrites: any; _entering: any; _pwSetup: any; publicKind: any; publicToken: any; utm: any; _bkShownAt: any; _placeT: any;
   constructor(props: any) {
     super(props);
     const saved = loadState();
@@ -71,6 +73,7 @@ export class PeakCombine extends React.Component<any, any> {
     bankItemId: null, bankDraft: null, bankEdits: {}, bankSaved: '',
     schools: null, taStages: null, callEvalPrompt: null, schoolsDraft: null, stagesDraft: null, promptOpen: false, remindMsg: '',
     board: {job:'', newRole:DEFAULT_ROLE, newProgram:'', newCustom:'', open:false, msg:''}, taLocal: {}, posting: null, postMsg: '',
+    jp: {open:false, q:'', showClosed:false}, jsOpen: false, postOpen: false, strandedOpen: false, moveTo: 'Initial interview', startDraft: {}, jobOver: {}, theme: 'dark', locFocus: false, locRemote: [],
     pub: {status:'loading', data:null, form:{name:'',email:'',phone:'',loc:'',linkedin:'',consent:false}, msg:'', busy:false, link:''},
     vPeriod: 'd30', retention: '24 months',
     // live mode
@@ -78,7 +81,9 @@ export class PeakCombine extends React.Component<any, any> {
     newCand: {name:'', email:'', phone:'', role:DEFAULT_ROLE, program:'', programPick:'', loc:'', school:'', linkedin:'', track:'assessment', file:null, saved:''},
     tr: {kind:TR_KINDS[0], title:'', txt:'', fileName:'', notes:'', msg:''}, trOpen: false, trShow: {}, rpItemsOpen: false, notesDraft: null
   };
+  applyTheme() { try { document.documentElement.setAttribute('data-theme', this.state.theme === 'light' ? 'light' : 'dark'); } catch (e) {} }
   componentDidMount() {
+    this.applyTheme();
     const D = PEAK_DATA;
     if (D && !this.state.weightsByRole) this.setState({weightsByRole: JSON.parse(JSON.stringify(D.weightsByRole || {}))});
     if (LIVE_ENABLED) this.initLive();
@@ -435,6 +440,57 @@ export class PeakCombine extends React.Component<any, any> {
     catch (e) { this.setPub({status:'invalid', msg:(e && e.message) || ''}); }
   }
   // ---- pipeline board (Jobs tab) ----
+  // A decision is parked on the card (amber) until "I let them know" is ticked; only then does the card move.
+  async decide(cid, decision) {
+    if (!LIVE_ENABLED) { const cur = this.state.taLocal[cid] || {}; this.setState({taLocal:{...this.state.taLocal, [cid]:{...cur, decision}}}); return; }
+    await this.write(() => this.live.setDecision(cid, decision), 'board');
+  }
+  async inform(c, k, job) {
+    const d = (!LIVE_ENABLED ? (this.state.taLocal[c.id] || {}).decision : c.taDecision) || 'fwd';
+    const OFFER = STAGE_NAMES.indexOf('Offer letter'), HIRED = STAGE_NAMES.indexOf('Hired');
+    let stage, reason = null;
+    if (d === 'no') { stage = 'Not moving forward'; reason = k === OFFER ? 'declined' : 'told'; }
+    else if (d === 'skip') stage = 'VP interview';
+    else stage = STAGE_NAMES[Math.min(k + 1, HIRED)];
+    const startDate = (this.state.startDraft || {})[c.id] || null;
+    const hired = stage === 'Hired';
+    if (!LIVE_ENABLED) {
+      const cur = this.state.taLocal[c.id] || {};
+      const jobOver = hired && job ? {...this.state.jobOver, [job.id]:'Filled'} : this.state.jobOver;
+      this.setState({taLocal:{...this.state.taLocal, [c.id]:{...cur, stage, decision:null, reason, informedAt:new Date().toISOString(), startDate}}, jobOver});
+      return;
+    }
+    const r = await this.write(() => this.live.applyDecision(c.id, {stage, reason, startDate}), 'board');
+    if (r.ok && hired && job) { await this.write(() => this.live.updateJob(job.id, {status:'Filled'}), 'board'); this.live.audit('Hired \u2014 ' + c.name + ' \u00b7 ' + job.label + ' marked Filled'); }
+    if (r.ok) this.setState({startDraft:{...(this.state.startDraft || {}), [c.id]:''}});
+  }
+  async moveStranded(ids, stage) {
+    if (!ids.length) return;
+    if (!LIVE_ENABLED) { const t = {...this.state.taLocal}; ids.forEach(id => { t[id] = {...(t[id] || {}), stage, decision:null}; }); this.setState({taLocal:t, strandedOpen:false}); return; }
+    const r = await this.write(() => this.live.setStageBulk(ids, stage), 'board');
+    if (r.ok) { this.live.audit('Moved ' + ids.length + ' stranded candidate' + (ids.length === 1 ? '' : 's') + ' to ' + stage); this.setState({strandedOpen:false}); }
+  }
+  async mergeJobs(dupIds, intoId, intoLabel) {
+    if (!LIVE_ENABLED || !dupIds.length) return;
+    this.setState({busy:'merge'});
+    const r = await this.write(() => this.live.mergeJobs(dupIds, intoId), 'board');
+    if (r.ok) { this.live.audit('Merged ' + dupIds.length + ' duplicate job' + (dupIds.length === 1 ? '' : 's') + ' into ' + intoLabel); await this.live.refresh(); this.setState({board:{...this.state.board, job:intoId, msg:'Merged \u00b7 candidates now sit on ' + intoLabel + '. The old links still work and land here.'}}); }
+    this.setState({busy:''});
+  }
+  // Saved schools / properties: adding one appends "Name" to the Settings list (persisted through the settings sync).
+  addSchool(name) {
+    const n = String(name || '').trim(); if (!n) return;
+    const list = this.state.schools || DEFAULT_SCHOOLS;
+    if (!schoolNames(list).some(s => s.toLowerCase() === n.toLowerCase())) { const next = [...list, n]; if (LIVE_ENABLED) this.queueSetting('schools', next); this.setState({schools:next}); }
+    return n;
+  }
+  searchPlaces(q) {
+    clearTimeout(this._placeT);
+    const token = ENVX.VITE_MAPBOX_TOKEN;
+    if (!token || String(q || '').trim().length < 3) { if ((this.state.locRemote || []).length) this.setState({locRemote:[]}); return; }
+    this._placeT = setTimeout(async () => { const res = await placeSearch(q, token); if (this.state.newCand.loc === q) this.setState({locRemote:res}); }, 300);
+  }
+  toggleTheme() { this.setState({theme: this.state.theme === 'light' ? 'dark' : 'light'}); }
   async moveStage(cid, stage) {
     if (!LIVE_ENABLED) { this.setState({taLocal:{...this.state.taLocal, [cid]:stage}}); return; }
     await this.write(() => this.live.setStage(cid, stage), 'board');
@@ -509,7 +565,7 @@ export class PeakCombine extends React.Component<any, any> {
   }
   renderVals() {
     const D = (LIVE_ENABLED ? this.liveD() : PEAK_DATA) || {comps:[],anchors:{},weights:[],scale:[],inventory:[],scenarios:[],objections:[],evQs:[],caseQs:[],realities:[],candidates:[],funnel:[],roles:[],hires:[],audit:[],users:[],roleDefs:{},interviewQs:[],applications:{},decisions:[],accoms:[],sessions:[],weightsByRole:{},invite:null};
-    const st = this.state, G = '#10B981', GL = '#34D399', AMB = '#F5B84A', RED = '#F87171', DIM = '#7E9186';
+    const st = this.state, G = 'var(--c-hex-10b981)', GL = 'var(--c-hex-34d399)', AMB = 'var(--c-hex-f5b84a)', RED = 'var(--c-hex-f87171)', DIM = 'var(--c-hex-7e9186)';
     const v = {};
     // shell
     v.texture = this.props.showTexture ?? true;
@@ -522,6 +578,7 @@ export class PeakCombine extends React.Component<any, any> {
     const profIdFor = role => (D.profileByRole || {})[role] || 'entry';
     const isAdminRole = st.mode === 'staff' && st.role === 'admin', isLead = st.mode === 'staff' && st.role === 'leadership', isMgr = st.mode === 'staff' && (st.role === 'manager' || st.role === 'admin');
     v.isEntry = !st.mode; v.inApp = !!st.mode && st.mode !== 'public'; v.isPublic = st.mode === 'public';
+    v.isLight = st.theme === 'light'; v.themeLabel = st.theme === 'light' ? '\u263e Dark' : '\u2600 Light'; v.toggleTheme = () => this.toggleTheme();
     v.viewingAs = !!st.viewAs;
     v.inviteExpired = st.mode === 'candidate' && st.invite === 'expired';
     v.isDemo = true; v.inviteLoading = false; v.inviteSaved = false; v.inviteInvalid = false; v.combineExpired = false; v.pwSetup = false; v.busy = false; v.loginInfo = ''; v.saveErr = ''; v.flashErr = ''; v.showInviteForm = false; v.pipeEmpty = false; v.noSessions = false; v.inboxEmpty = false; v.validEmpty = false; v.pNeedsScore = false; v.rpNeedsEvidence = false; v.schLinkEditable = false; v.schBusy = false; v.joinHref = ''; v.trEnabled = false; v.liveTranscripts = []; v.pTranscripts = [];
@@ -543,7 +600,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.roleTitle = v.viewingAs ? 'Candidate Portal · view as' : st.mode === 'candidate' ? 'Candidate Portal' : v.isEval ? 'Evaluator Cockpit' : isLead ? 'Leadership & Compliance' : isAdminRole ? 'Admin' : 'Hiring Manager';
     v.userLabel = st.mode === 'candidate' ? inv.name : user ? (user.short + ' · ' + roleLabel(st.role)) : '';
     v.showRoleChips = !!user && roles.length > 1 && !v.viewingAs;
-    v.roleChips = roles.map(r => ({label: roleLabel(r), on: () => this.setState({role:r, aview: r === 'manager' ? 'pipe' : 'funnel', eview:'roster'}), bg: st.role === r ? 'rgba(16,185,129,.16)' : 'transparent', fg: st.role === r ? GL : '#8FA396'}));
+    v.roleChips = roles.map(r => ({label: roleLabel(r), on: () => this.setState({role:r, aview: r === 'manager' ? 'pipe' : 'funnel', eview:'roster'}), bg: st.role === r ? 'var(--c-rgba-16-185-129-16)' : 'transparent', fg: st.role === r ? GL : 'var(--c-hex-8fa396)'}));
     const vaCand = st.viewAs ? (D.candidates.find(c => c.id === st.viewAs) || null) : null;
     v.viewAsName = vaCand ? vaCand.name : '';
     v.exitViewAs = () => this.setState({viewAs:null});
@@ -553,7 +610,7 @@ export class PeakCombine extends React.Component<any, any> {
     if (st.accomSent) seededAccoms.unshift({id:'alex', candId:'alex', cand:'Alex Carter · Candidate #1064', t:'Just now', txt: st.accomTxt.trim() || '(no detail provided)', status:'Open'});
     const accomApproved = candId => { const a = seededAccoms.find(x => x.candId === candId); if (!a) return false; const ov = st.accomState[a.id]; return (ov ? ov.status : a.status) === 'Approved'; };
     const tylerAccom = accomApproved(LIVE_ENABLED ? st.liveCand : 'tyler');
-    const tab = (label, on, active) => ({label, go:on, bg: active ? 'rgba(16,185,129,.12)' : 'transparent', fg: active ? GL : '#8FA396'});
+    const tab = (label, on, active) => ({label, go:on, bg: active ? 'var(--c-rgba-16-185-129-12)' : 'transparent', fg: active ? GL : 'var(--c-hex-8fa396)'});
     if (v.isCand) v.navTabs = [tab(isCombine ? 'My combine' : isInfo ? 'My details' : 'My assessment', () => this.setState({cview: isCombine ? 's5' : isInfo ? (this.state.infoDone ? 'infodone' : 'info') : 'dash'}), true)];
     else if (v.isEval) v.navTabs = [tab('Sessions', () => this.setState({eview:'roster'}), st.eview === 'roster'), tab('Live combine', () => this.setState({eview:'live'}), st.eview === 'live'), tab('Interviews', () => this.setState({eview:'ivlist'}), st.eview === 'ivlist' || st.eview === 'ivcard')];
     else if (v.isStaff) {
@@ -579,7 +636,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.candDue = inv.due; v.candSession = inv.session; v.candLink = inv.link; v.joinDisabled = true; v.candHasSession = !!inv.hasSession;
     v.combineHref = inv.combineLink || '';
     const mobile = this.props.mobilePreview ?? false;
-    v.candMax = mobile ? '400px' : '860px'; v.candFrame = mobile ? '1px solid rgba(160,190,170,.18)' : 'none';
+    v.candMax = mobile ? '400px' : '860px'; v.candFrame = mobile ? '1px solid var(--c-rgba-160-190-170-18)' : 'none';
     v.candPE = v.viewingAs ? 'none' : 'auto';
     const cv = st.cview;
     v.vDash = !isCombine && !isInfo && cv === 'dash'; v.vS1 = cv === 's1'; v.vS2 = cv === 's2' || (isInfo && (cv === 'info' || cv === 'dash')); v.vS3 = cv === 's3'; v.vFinished = cv === 'finished';
@@ -600,12 +657,12 @@ export class PeakCombine extends React.Component<any, any> {
       return {
         n:d.n, title:d.title, time:d.time,
         status: dn ? 'Complete' : locked ? 'Locked' : started ? 'In progress' : 'Not started',
-        statusColor: dn ? GL : locked ? '#4A554D' : started ? AMB : DIM,
-        border: dn ? 'rgba(16,185,129,.3)' : 'rgba(160,190,170,.13)',
+        statusColor: dn ? GL : locked ? 'var(--c-hex-4a554d)' : started ? AMB : DIM,
+        border: dn ? 'var(--c-rgba-16-185-129-3)' : 'var(--c-rgba-160-190-170-13)',
         numColor: dn ? GL : DIM,
         canGo: !locked && !dn, btn: started ? 'Resume' : 'Start',
-        btnBg: started ? 'transparent' : G, btnFg: started ? '#E9F0EA' : '#04120B',
-        btnBorder: started ? '1px solid rgba(160,190,170,.3)' : 'none',
+        btnBg: started ? 'transparent' : G, btnFg: started ? 'var(--c-hex-e9f0ea)' : 'var(--c-hex-04120b)',
+        btnBorder: started ? '1px solid var(--c-rgba-160-190-170-3)' : 'none',
         go: () => this.setState({cview:d.view})
       };
     });
@@ -623,16 +680,16 @@ export class PeakCombine extends React.Component<any, any> {
       {label:'Live combine', sub: combineSub, on: done.s5a || !!inv.hasSession},
       {label:'Panel review', sub:'Two evaluators’ scores compared; any disagreement is discussed, never averaged away', on: done.s5a},
       {label:'Decision', sub: decided ? 'Recorded — see below' : 'Within five business days of your combine, by email and here', on: decided}
-    ].map(s => ({label:s.label, sub:s.sub, mark: s.on ? '●' : '○', color: s.on ? GL : '#5C6B61'}));
+    ].map(s => ({label:s.label, sub:s.sub, mark: s.on ? '●' : '○', color: s.on ? GL : 'var(--c-hex-5c6b61)'}));
     v.decisionAdvance = (selfDone || isCombine) && decision === 'Advance'; v.decisionDecline = (selfDone || isCombine) && decision === 'Decline';
     v.decisionAdvanceTxt = 'Two evaluators independently reviewed your combine, interview, and evidence. Ram\u00f3n Delgado, Regional Sales Director, will call you within two business days to walk through the offer and cohort start date. A copy of this decision was emailed to you.';
     // s1 — acknowledgment plus one multiple-choice question (no free text anywhere in the assessment)
     v.realities = D.realities; v.ack = st.ack;
     v.toggleAck = () => this.setState({ack:!st.ack});
-    v.ackBorder = st.ack ? 'rgba(16,185,129,.45)' : 'rgba(160,190,170,.13)';
-    v.challengeOpts = (D.realities || []).map(r => { const on = st.challenge === r; return {label:r, on: () => this.setState({challenge:r}), bg: on ? 'rgba(16,185,129,.16)' : '#0B120E', border: on ? 'rgba(16,185,129,.6)' : 'rgba(160,190,170,.2)', fg: on ? GL : '#D5DED7'}; });
+    v.ackBorder = st.ack ? 'var(--c-rgba-16-185-129-45)' : 'var(--c-rgba-160-190-170-13)';
+    v.challengeOpts = (D.realities || []).map(r => { const on = st.challenge === r; return {label:r, on: () => this.setState({challenge:r}), bg: on ? 'var(--c-rgba-16-185-129-16)' : 'var(--c-hex-0b120e)', border: on ? 'var(--c-rgba-16-185-129-6)' : 'var(--c-rgba-160-190-170-2)', fg: on ? GL : 'var(--c-hex-d5ded7)'}; });
     const s1ok = st.ack && !!st.challenge;
-    v.s1Blocked = !s1ok; v.s1BtnBg = s1ok ? G : '#20302680';
+    v.s1Blocked = !s1ok; v.s1BtnBg = s1ok ? G : 'var(--c-hex-20302680)';
     v.s1Hint = s1ok ? '' : 'Check the acknowledgment and pick the part you expect to be hardest.';
     v.submitS1 = () => { if (s1ok) this.markDone('s1', {cview:'dash'}); };
     // s2 — contact details and résumé (also the whole of a details-only link)
@@ -644,7 +701,7 @@ export class PeakCombine extends React.Component<any, any> {
       {label:'Location', ph:'e.g. San Marcos, TX · open to relocation', val:ap.loc, set:setA('loc')}
     ];
     // the school / property the candidate is applying to — a dropdown of Peak's schools when the list is set, free text otherwise
-    const schoolList = (LIVE_ENABLED && st.mode === 'candidate') ? ((this.candInfo && this.candInfo.schools) || []) : (st.schools || DEFAULT_SCHOOLS);
+    const schoolList = schoolNames((LIVE_ENABLED && st.mode === 'candidate') ? ((this.candInfo && this.candInfo.schools) || []) : (st.schools || DEFAULT_SCHOOLS));
     v.appProgram = ap.program || ''; v.setAppProgram = setA('program');
     v.schoolIsSelect = schoolList.length > 0;
     v.schoolOpts = [{id:'', label:'Select the school / property\u2026'}, ...(ap.program && !schoolList.includes(ap.program) ? [{id:ap.program, label:ap.program}] : []), ...schoolList.map(s => ({id:s, label:s}))];
@@ -652,20 +709,20 @@ export class PeakCombine extends React.Component<any, any> {
     v.appLinkedin = ap.linkedin; v.setLinkedin = setA('linkedin');
     v.authYes = () => this.setState({app:{...ap, auth:true}});
     v.authNo = () => this.setState({app:{...ap, auth:false}});
-    v.authYesBg = ap.auth===true ? 'rgba(16,185,129,.16)' : '#0B120E'; v.authYesFg = ap.auth===true ? GL : '#A7B5AB';
-    v.authNoBg = ap.auth===false ? 'rgba(16,185,129,.16)' : '#0B120E'; v.authNoFg = ap.auth===false ? GL : '#A7B5AB';
+    v.authYesBg = ap.auth===true ? 'var(--c-rgba-16-185-129-16)' : 'var(--c-hex-0b120e)'; v.authYesFg = ap.auth===true ? GL : 'var(--c-hex-a7b5ab)';
+    v.authNoBg = ap.auth===false ? 'var(--c-rgba-16-185-129-16)' : 'var(--c-hex-0b120e)'; v.authNoFg = ap.auth===false ? GL : 'var(--c-hex-a7b5ab)';
     const resumeName = ap.resume && typeof ap.resume === 'object' ? ap.resume.name : ap.resume ? 'Résumé on file' : '';
     v.pickResume = e => this.pickResume(e);
     v.resumeTxt = resumeName ? resumeName + ' ✓ uploaded' : 'Upload résumé';
     v.resumeSub = resumeName ? 'Click to replace it' : 'PDF or Word · 15 MB max · secure upload';
-    v.resumeMsg = st.resumeMsg || ''; v.resumeMsgColor = /^Could not/.test(st.resumeMsg || '') ? RED : '#8FA396';
-    v.resumeBorder = resumeName ? 'rgba(16,185,129,.5)' : 'rgba(160,190,170,.3)';
-    v.resumeBg = resumeName ? 'rgba(16,185,129,.06)' : 'transparent';
-    v.resumeColor = resumeName ? GL : '#A7B5AB';
+    v.resumeMsg = st.resumeMsg || ''; v.resumeMsgColor = /^Could not/.test(st.resumeMsg || '') ? RED : 'var(--c-hex-8fa396)';
+    v.resumeBorder = resumeName ? 'var(--c-rgba-16-185-129-5)' : 'var(--c-rgba-160-190-170-3)';
+    v.resumeBg = resumeName ? 'var(--c-rgba-16-185-129-06)' : 'transparent';
+    v.resumeColor = resumeName ? GL : 'var(--c-hex-a7b5ab)';
     v.consent = ap.consent;
     v.toggleConsent = () => this.setState({app:{...ap, consent:!ap.consent}});
     const s2ok = ap.name && ap.email && ap.auth!==null && !!ap.resume && ap.consent && !!(ap.program || '').trim();
-    v.s2Blocked = !s2ok; v.s2BtnBg = s2ok ? G : '#20302680';
+    v.s2Blocked = !s2ok; v.s2BtnBg = s2ok ? G : 'var(--c-hex-20302680)';
     v.s2Hint = s2ok ? '' : 'Complete your contact details, the school you\u2019re applying to, your r\u00e9sum\u00e9, work authorization, and consent.';
     v.submitS2 = () => { if (!s2ok) return; if (isInfo) this.setState({infoDone:true, cview:'infodone'}); else this.markDone('s2', {cview:'dash'}); };
     v.s2Kicker = isInfo ? 'Your details' : 'Stage 02 · Your details & résumé';
@@ -705,7 +762,7 @@ export class PeakCombine extends React.Component<any, any> {
       const a = {...this.state.bkAns, [bkItem.id]: val}; const times = recordTime(); const nx = bkI + 1;
       if (nx >= bkTotal) this.setState({bkAns:a, bkTimes:times, bkTemp:null, bkIdx:bkTotal, done:{...this.state.done, s3:true, s4:true}, cview:'finished'}); else this.setState({bkAns:a, bkTimes:times, bkTemp:null, bkIdx:nx});
     };
-    const selSty = on => ({bg: on ? 'rgba(16,185,129,.16)' : '#0B120E', border: on ? 'rgba(16,185,129,.6)' : 'rgba(160,190,170,.2)', fg: on ? GL : '#D5DED7'});
+    const selSty = on => ({bg: on ? 'var(--c-rgba-16-185-129-16)' : 'var(--c-hex-0b120e)', border: on ? 'var(--c-rgba-16-185-129-6)' : 'var(--c-rgba-160-190-170-2)', fg: on ? GL : 'var(--c-hex-d5ded7)'});
     v.bkScale = ['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'].map((label, k) => ({label, ...selSty(bkCur === k + 1), on: () => bkPick(k + 1)}));
     v.bkPair = bkItem.kind === 'pair' ? [['a', bkItem.a[2]], ['b', bkItem.b[2]]].map(([side, text]) => ({text, ...selSty(bkCur === side), on: () => bkPick(side)})) : [];
     v.bkOpts = v.bkIsChoice ? (bkItem.kind === 'insight' ? bkItem.opts : B.shuffled(bkItem.opts, bkI * 7 + 13)).map((o, k) => ({letter:'ABCD'[k], text:o.text, ...selSty(twoPick ? st.bkTemp === o.i : bkCur === o.i), tag: twoPick && st.bkTemp === o.i ? 'Most likely' : '', on: () => bkPick(o.i)})) : [];
@@ -723,7 +780,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.s5bStatus = done.s5b ? 'Submitted' : 'Due before your session'; v.s5bStatusColor = done.s5b ? GL : DIM;
     v.s5aBtnTxt = done.s5a ? 'Session summary' : 'Session details';
     v.s5bBtnTxt = done.s5b ? 'View submission' : 'Begin Exercise B';
-    const gBtn = dn => dn ? {bg:'transparent', fg:'#E9F0EA', bd:'1px solid rgba(160,190,170,.3)'} : {bg:G, fg:'#04120B', bd:'none'};
+    const gBtn = dn => dn ? {bg:'transparent', fg:'var(--c-hex-e9f0ea)', bd:'1px solid var(--c-rgba-160-190-170-3)'} : {bg:G, fg:'var(--c-hex-04120b)', bd:'none'};
     const ga = gBtn(true), gb = gBtn(done.s5b);
     v.s5aBtnBg = ga.bg; v.s5aBtnFg = ga.fg; v.s5aBtnBorder = ga.bd;
     v.s5bBtnBg = gb.bg; v.s5bBtnFg = gb.fg; v.s5bBtnBorder = gb.bd;
@@ -731,7 +788,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.goS5b = () => this.setState({cview:'s5b'});
     // s5a (live session details)
     v.consentRec = st.consentRec; v.toggleConsentRec = () => this.setState({consentRec:!st.consentRec});
-    v.consentBorder = st.consentRec ? 'rgba(16,185,129,.45)' : 'rgba(160,190,170,.13)';
+    v.consentBorder = st.consentRec ? 'var(--c-rgba-16-185-129-45)' : 'var(--c-rgba-160-190-170-13)';
     v.notResched = !st.resched; v.resched = st.resched; v.askResched = () => this.setState({resched:true});
     const gcalHref = () => { const s = inv.startsAt ? new Date(inv.startsAt) : null; if (!s || isNaN(s.getTime())) return ''; const e = new Date(s.getTime() + 60 * 60000); const f = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent('Peak Sales Combine — live session') + '&dates=' + f(s) + '/' + f(e) + '&details=' + encodeURIComponent('Combine page: ' + (inv.combineLink || '')) + (inv.link && /^https?:/.test(inv.link) ? '&location=' + encodeURIComponent(inv.link) : ''); };
     v.gcalHref = LIVE_ENABLED ? gcalHref() : '';
@@ -740,12 +797,12 @@ export class PeakCombine extends React.Component<any, any> {
     v.pickCaseFile = e => this.pickCaseFile(e);
     v.caseUpTxt = caseFile ? caseFile.name + ' ✓ ready to submit' : (st.caseMode==='Video' ? 'Upload a short video response' : 'Upload your slide deck');
     v.caseUpSub = caseFile ? 'Click to replace it' : st.caseMode==='Video' ? '5:00 max · MP4, MOV or WEBM · 15 MB' : 'PDF or PowerPoint · 15 MB max';
-    v.caseMsg = st.caseMsg || ''; v.caseMsgColor = /^Could not/.test(st.caseMsg || '') ? RED : '#8FA396';
-    v.recBorder = caseFile ? 'rgba(16,185,129,.5)' : 'rgba(160,190,170,.3)';
-    v.recBg = caseFile ? 'rgba(16,185,129,.06)' : 'transparent';
-    v.recColor = caseFile ? GL : '#A7B5AB';
+    v.caseMsg = st.caseMsg || ''; v.caseMsgColor = /^Could not/.test(st.caseMsg || '') ? RED : 'var(--c-hex-8fa396)';
+    v.recBorder = caseFile ? 'var(--c-rgba-16-185-129-5)' : 'var(--c-rgba-160-190-170-3)';
+    v.recBg = caseFile ? 'var(--c-rgba-16-185-129-06)' : 'transparent';
+    v.recColor = caseFile ? GL : 'var(--c-hex-a7b5ab)';
     // s5b
-    v.caseModes = ['Written','Slides upload','Video'].map(m => ({label:m, on:() => this.setState({caseMode:m}), bg: st.caseMode===m ? 'rgba(16,185,129,.14)' : 'transparent', fg: st.caseMode===m ? GL : '#8FA396'}));
+    v.caseModes = ['Written','Slides upload','Video'].map(m => ({label:m, on:() => this.setState({caseMode:m}), bg: st.caseMode===m ? 'var(--c-rgba-16-185-129-14)' : 'transparent', fg: st.caseMode===m ? GL : 'var(--c-hex-8fa396)'}));
     v.caseWritten = st.caseMode==='Written';
     v.caseUpload = st.caseMode!=='Written';
     const caseDef = ((D.caseByProfile || {})[profIdFor(candRole)]) || ((D.caseByProfile || {}).entry) || {};
@@ -754,7 +811,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.caseItems = caseQs.map((q, i) => ({num: String(i+1).padStart(2,'0'), q, val: st.caseAns[i] || '', set: e => { const a=[...this.state.caseAns]; a[i]=e.target.value; this.setState({caseAns:a}); }}));
     const s5bOk = st.caseMode==='Written' ? caseQs.every((q, i) => (st.caseAns[i] || '').trim().length > 10) : !!caseFile;
     v.s5bBlocked = !s5bOk || done.s5b;
-    v.s5bSubmitBg = (s5bOk && !done.s5b) ? G : '#20302680';
+    v.s5bSubmitBg = (s5bOk && !done.s5b) ? G : 'var(--c-hex-20302680)';
     v.submitS5b = () => { if (s5bOk && !done.s5b) this.markDone('s5b', {cview:'s5'}); };
     // accommodation
     v.accomOpen = st.accomOpen; v.toggleAccom = () => this.setState({accomOpen:!st.accomOpen});
@@ -782,7 +839,7 @@ export class PeakCombine extends React.Component<any, any> {
     const ph = st.phase;
     const phases = [['brief','Brief'],['r1','Round 1'],['score1','Score R1'],['coach','Coach'],['r2','Re-pitch'],['score2','Score R2'],['rec','Recommend'],['compare','Agreement']];
     const phIdx = phases.findIndex(p => p[0]===ph);
-    v.phaseSteps = phases.map((p, i) => ({label:p[1], bg: i===phIdx ? 'rgba(16,185,129,.16)' : 'transparent', fg: i===phIdx ? GL : i<phIdx ? '#8FA396' : '#4A554D'}));
+    v.phaseSteps = phases.map((p, i) => ({label:p[1], bg: i===phIdx ? 'var(--c-rgba-16-185-129-16)' : 'transparent', fg: i===phIdx ? GL : i<phIdx ? 'var(--c-hex-8fa396)' : 'var(--c-hex-4a554d)'}));
     v.liveTimerLabel = ph==='r1' ? 'Round 1 \u00b7 pitch (3:00)' : ph==='coach' ? ('Re-pitch prep (' + (tylerAccom ? '7:30' : '5:00') + ')') : ph==='r2' ? 'Round 2 \u00b7 re-pitch (3:00)' : 'Timer';
     const adv = {brief:['Start Round 1 \u25b8', () => { this.setState({phase:'r1'}); this.start(180); }],
       r1:['End pitch \u2192 score', () => this.setState({phase:'score1', timer:{...st.timer,on:false}})],
@@ -792,7 +849,7 @@ export class PeakCombine extends React.Component<any, any> {
       score2:['Go to recommendation \u25b8', () => this.setState({phase:'rec'})],
       rec:['\u2014', () => {}], compare:['\u2014', () => {}]};
     v.liveAdvanceTxt = adv[ph][0]; v.liveAdvance = adv[ph][1];
-    v.objCards = D.objections.map((text, i) => ({text, tick: st.objUsed[i] ? '\u2713' : '\u25cb', mark: st.objUsed[i] ? GL : '#5C6B61', border: st.objUsed[i] ? 'rgba(16,185,129,.35)' : 'rgba(160,190,170,.14)', toggle: () => this.setState({objUsed:{...this.state.objUsed, [i]:!this.state.objUsed[i]}})}));
+    v.objCards = D.objections.map((text, i) => ({text, tick: st.objUsed[i] ? '\u2713' : '\u25cb', mark: st.objUsed[i] ? GL : 'var(--c-hex-5c6b61)', border: st.objUsed[i] ? 'var(--c-rgba-16-185-129-35)' : 'var(--c-rgba-160-190-170-14)', toggle: () => this.setState({objUsed:{...this.state.objUsed, [i]:!this.state.objUsed[i]}})}));
     v.showCoachCard = ph==='coach' || ph==='r2' || ph==='score2' || ph==='rec' || ph==='compare';
     v.coach = st.coach; v.setCoach = e => this.setState({coach:e.target.value});
     const round2 = ph==='score2' || ph==='rec' || ph==='compare';
@@ -800,10 +857,10 @@ export class PeakCombine extends React.Component<any, any> {
     v.coiNeeded = !st.coi && ph !== 'compare';
     v.showScoring = ph!=='compare' && ph!=='rec' && st.coi;
     v.liveFlags = [
-      {label: tylerAccom ? 'Accommodation in place · +50% prep time' : 'No accommodations', fg: tylerAccom ? '#E9D9B0' : '#7E9186', bg: tylerAccom ? 'rgba(245,184,74,.1)' : 'transparent', border: tylerAccom ? 'rgba(245,184,74,.35)' : 'rgba(160,190,170,.14)'},
-      {label:'Recording consent ✓', fg:GL, bg:'rgba(16,185,129,.1)', border:'rgba(16,185,129,.3)'},
-      {label:'Case submitted Tue · read it', fg:GL, bg:'rgba(16,185,129,.1)', border:'rgba(16,185,129,.3)'},
-      {label: st.coi ? 'COI declared ✓' : 'COI declaration pending', fg: st.coi ? GL : AMB, bg: st.coi ? 'rgba(16,185,129,.1)' : 'rgba(245,184,74,.1)', border: st.coi ? 'rgba(16,185,129,.3)' : 'rgba(245,184,74,.35)'}
+      {label: tylerAccom ? 'Accommodation in place · +50% prep time' : 'No accommodations', fg: tylerAccom ? 'var(--c-hex-e9d9b0)' : 'var(--c-hex-7e9186)', bg: tylerAccom ? 'var(--c-rgba-245-184-74-1)' : 'transparent', border: tylerAccom ? 'var(--c-rgba-245-184-74-35)' : 'var(--c-rgba-160-190-170-14)'},
+      {label:'Recording consent ✓', fg:GL, bg:'var(--c-rgba-16-185-129-1)', border:'var(--c-rgba-16-185-129-3)'},
+      {label:'Case submitted Tue · read it', fg:GL, bg:'var(--c-rgba-16-185-129-1)', border:'var(--c-rgba-16-185-129-3)'},
+      {label: st.coi ? 'COI declared ✓' : 'COI declaration pending', fg: st.coi ? GL : AMB, bg: st.coi ? 'var(--c-rgba-16-185-129-1)' : 'var(--c-rgba-245-184-74-1)', border: st.coi ? 'var(--c-rgba-16-185-129-3)' : 'var(--c-rgba-245-184-74-35)'}
     ];
     v.scoreTitle = round2 ? 'Round 2 \u2014 coached re-pitch' : 'Round 1 \u2014 first attempt';
     const rKey = round2 ? 'r2' : 'r1';
@@ -816,8 +873,8 @@ export class PeakCombine extends React.Component<any, any> {
         name: compName(id),
         anchor: val ? (anch[val] || ('Between the level-' + (val-1) + ' and level-' + (val+1) + ' anchors.')) : ('1 \u2014 ' + (anch[1]||'') + '  \u00b7  5 \u2014 ' + (anch[5]||'')),
         chips: [1,2,3,4,5].map(n => ({n, aria: compName(id)+' '+n,
-          bg: val===n ? G : '#0B120E', fg: val===n ? '#04120B' : '#A7B5AB',
-          border: val===n ? G : 'rgba(160,190,170,.2)',
+          bg: val===n ? G : 'var(--c-hex-0b120e)', fg: val===n ? 'var(--c-hex-04120b)' : 'var(--c-hex-a7b5ab)',
+          border: val===n ? G : 'var(--c-rgba-160-190-170-2)',
           on: () => this.setState({[rKey]: {...this.state[rKey], [id]: n}})}))
       };
     });
@@ -830,10 +887,10 @@ export class PeakCombine extends React.Component<any, any> {
     v.deltaTxt = (a1 && a2) ? ((a2-a1>=0?'+':'') + (a2-a1).toFixed(1)) : '\u2014';
     v.recBtns = ['Advance','Hold','Do Not Advance'].map(r => ({label:r, on:() => this.setState({rec:r}),
       bg: st.rec===r ? (r==='Advance'?G:r==='Hold'?AMB:RED) : 'transparent',
-      fg: st.rec===r ? '#04120B' : (r==='Advance'?GL:r==='Hold'?AMB:RED),
-      border: r==='Advance'?'rgba(16,185,129,.4)':r==='Hold'?'rgba(245,184,74,.4)':'rgba(248,113,113,.4)'}));
+      fg: st.rec===r ? 'var(--c-hex-04120b)' : (r==='Advance'?GL:r==='Hold'?AMB:RED),
+      border: r==='Advance'?'var(--c-rgba-16-185-129-4)':r==='Hold'?'var(--c-rgba-245-184-74-4)':'var(--c-rgba-248-113-113-4)'}));
     v.evalBlocked = !st.rec;
-    v.evalSubmitBg = st.rec ? G : '#20302680';
+    v.evalSubmitBg = st.rec ? G : 'var(--c-hex-20302680)';
     v.submitEval = () => { if (st.rec) this.setState({submitted:true, phase:'compare'}); };
     v.showCompare = ph==='compare';
     const OTHER = {sj:3.5, hd:3.5, re:3.5, sa:2.0, co:3.5};
@@ -845,8 +902,8 @@ export class PeakCombine extends React.Component<any, any> {
       return {name: compName(id), mine: mine!=null?mine.toFixed(1):'\u2014', other: oth.toFixed(1),
         flagTxt: mine==null ? 'not scored' : flag ? '\u26a0 \u0394 '+diff.toFixed(1)+' \u2014 flagged' : '\u0394 '+diff.toFixed(1)+' \u00b7 aligned',
         flagColor: flag ? AMB : GL,
-        bg: flag ? 'rgba(245,184,74,.06)' : '#0B120E',
-        border: flag ? 'rgba(245,184,74,.4)' : 'rgba(160,190,170,.1)'};
+        bg: flag ? 'var(--c-rgba-245-184-74-06)' : 'var(--c-hex-0b120e)',
+        border: flag ? 'var(--c-rgba-245-184-74-4)' : 'var(--c-rgba-160-190-170-1)'};
     });
     // interviews
     v.vIvList = st.eview === 'ivlist'; v.vIvCard = st.eview === 'ivcard';
@@ -860,12 +917,12 @@ export class PeakCombine extends React.Component<any, any> {
       const val = st.ivScores[q.comp], anch = D.anchors[q.comp] || {};
       return {num:'Q' + (i + 1), comp: compName(q.comp), q:q.q, probes:q.probes.join(' · '),
         anchor: val ? (anch[val] || ('Between the level-' + (val - 1) + ' and level-' + (val + 1) + ' anchors.')) : ('1 — ' + (anch[1] || '') + '  ·  5 — ' + (anch[5] || '')),
-        chips:[1,2,3,4,5].map(n => ({n, aria: compName(q.comp) + ' ' + n, bg: val === n ? G : '#0B120E', fg: val === n ? '#04120B' : '#A7B5AB', border: val === n ? G : 'rgba(160,190,170,.2)', on: () => { if (!this.state.ivSubmitted) this.setState({ivScores:{...this.state.ivScores, [q.comp]:n}}); }}))};
+        chips:[1,2,3,4,5].map(n => ({n, aria: compName(q.comp) + ' ' + n, bg: val === n ? G : 'var(--c-hex-0b120e)', fg: val === n ? 'var(--c-hex-04120b)' : 'var(--c-hex-a7b5ab)', border: val === n ? G : 'var(--c-rgba-160-190-170-2)', on: () => { if (!this.state.ivSubmitted) this.setState({ivScores:{...this.state.ivScores, [q.comp]:n}}); }}))};
     });
     const ivN = Object.keys(st.ivScores).length, ivTot = ivQs.length;
     v.ivProgress = ivN + ' of ' + ivTot + ' scored.';
     v.ivNotes = st.ivNotes; v.setIvNotes = e => this.setState({ivNotes:e.target.value});
-    v.ivBlocked = ivN < ivTot || st.ivSubmitted; v.ivSubmitBg = (ivN >= ivTot && !st.ivSubmitted) ? G : '#20302680';
+    v.ivBlocked = ivN < ivTot || st.ivSubmitted; v.ivSubmitBg = (ivN >= ivTot && !st.ivSubmitted) ? G : 'var(--c-hex-20302680)';
     v.ivNotSubmitted = !st.ivSubmitted; v.ivSubmitted = st.ivSubmitted;
     v.submitIv = () => { if (Object.keys(this.state.ivScores).length >= ivTot) this.setState({ivSubmitted:true}); };
     // ===== admin =====
@@ -882,7 +939,7 @@ export class PeakCombine extends React.Component<any, any> {
     const applied = D.candidates.filter(c => c.source === 'self');
     v.sourceNote = LIVE_ENABLED ? (applied.length + ' of ' + D.candidates.length + ' applied on their own through a job link; the rest were added by staff.') : '';
     v.blind = st.blind; v.toggleBlind = () => this.setState({blind:!st.blind});
-    v.blindState = st.blind ? 'on' : 'off'; v.blindColor = st.blind ? GL : '#8FA396';
+    v.blindState = st.blind ? 'on' : 'off'; v.blindColor = st.blind ? GL : 'var(--c-hex-8fa396)';
     const dispName = c => st.blind ? c.anon : c.name;
     v.pipeRows = D.candidates.map(c => {
       const inCmp = st.cmpA===c.id || st.cmpB===c.id;
@@ -890,18 +947,18 @@ export class PeakCombine extends React.Component<any, any> {
       return {
         dName: dispName(c), dSub: st.blind ? 'details hidden \u00b7 blind review' : (c.loc + ' \u00b7 ' + c.school),
         role: c.role, stageLabel: st.arDone[c.id] || (st.scheduled.find(s => s.candId === c.id) ? 'Combine scheduled · ' + st.scheduled.find(s => s.candId === c.id).when : c.stageLabel),
-        stageColor: c.stage>=6 ? GL : c.stage>=5 ? AMB : '#8FA396',
+        stageColor: c.stage>=6 ? GL : c.stage>=5 ? AMB : 'var(--c-hex-8fa396)',
         readiness: c.readiness ? c.readiness.toFixed(1) : '\u2014',
-        readColor: c.readiness ? (c.readiness>=4 ? GL : c.readiness>=3 ? '#E9F0EA' : AMB) : '#4A554D',
-        agree: c.agree, agreeColor: c.agree==='Flagged' ? AMB : c.agree==='High' ? GL : '#5C6B61',
+        readColor: c.readiness ? (c.readiness>=4 ? GL : c.readiness>=3 ? 'var(--c-hex-e9f0ea)' : AMB) : 'var(--c-hex-4a554d)',
+        agree: c.agree, agreeColor: c.agree==='Flagged' ? AMB : c.agree==='High' ? GL : 'var(--c-hex-5c6b61)',
         openProfile: () => this.setState({profileId:c.id, aview:'profile', dec:{rec:null, note:''}, notesDraft:null, trOpen:false, rpItemsOpen:false}),
         canReview: c.stage === 2 && isMgr && !st.arDone[c.id],
         review: () => this.setState({arId:c.id, aview:'appreview', arRatings:{}, arSaved:''}),
         viewAs: () => this.setState({viewAs:c.id, cview:'dash'}),
         noCmp: !hasData,
         cmpTxt: inCmp ? '\u2713 selected' : 'Compare',
-        cmpBg: inCmp ? 'rgba(16,185,129,.14)' : 'transparent',
-        cmpFg: !hasData ? '#3A453D' : inCmp ? GL : '#A7B5AB',
+        cmpBg: inCmp ? 'var(--c-rgba-16-185-129-14)' : 'transparent',
+        cmpFg: !hasData ? 'var(--c-hex-3a453d)' : inCmp ? GL : 'var(--c-hex-a7b5ab)',
         pickCmp: () => { if (!hasData) return; const s=this.state; if (s.cmpA===c.id) this.setState({cmpA:null}); else if (s.cmpB===c.id) this.setState({cmpB:null}); else if (!s.cmpA) this.setState({cmpA:c.id}); else if (!s.cmpB) this.setState({cmpB:c.id}); else this.setState({cmpB:c.id}); }
       };
     });
@@ -919,13 +976,13 @@ export class PeakCombine extends React.Component<any, any> {
     const bsAll = st.bankSettings || (B ? Object.fromEntries(B.ROLE_LIST.map(r => [r.id, B.defaultSettings(r)])) : {});
     const reportFor = c => { if (LIVE_ENABLED) return (B && c && c.report) ? {prof: B.profileForReport(c.report, profIdFor(c.role)), res: c.report} : null; if (!B || !c || c.sjt == null) return null; const prof = B.ROLES[profIdFor(c.role)]; const tier = c.sjt >= 80 ? 'strong' : c.sjt >= 62 ? 'mixed' : 'weak'; return {prof, res: B.score(prof, B.demoAnswers(prof, tier), bsAll[prof.id] || B.defaultSettings(prof))}; };
     const rp = reportFor(p);
-    const sigColor = s => s >= 95 ? G : s >= 70 ? GL : s >= 45 ? '#A7B5AB' : s >= 20 ? AMB : RED;
+    const sigColor = s => s >= 95 ? G : s >= 70 ? GL : s >= 45 ? 'var(--c-hex-a7b5ab)' : s >= 20 ? AMB : RED;
     const kindLabel = k => ({likert:'Self-rating', pair:'Forced choice', scenario:'Scenario', worst:'Worst move'})[k] || k;
-    const evRow = it => ({q:it.q, title:it.title || '', answer:it.answer, signal:it.signal, score:it.score, best:it.best || '', color: sigColor(it.score), kind: kindLabel(it.kind), why: it.why || '', miss: it.miss || '', reason: it.reason || '', least: it.least || '', leastScore: it.leastScore, leastSignal: it.leastSignal || '', leastColor: it.leastScore != null ? sigColor(it.leastScore) : '#7E9186', options: (it.options || []).map(o => ({text:o.text, score:o.score, signal:o.signal, reason:o.reason || '', chosen:!!o.chosen, least:!!o.least, flag:o.flag || '', positive:o.positive || '', color: sigColor(o.score), weight: (o.chosen || o.least) ? '800' : '400'}))});
+    const evRow = it => ({q:it.q, title:it.title || '', answer:it.answer, signal:it.signal, score:it.score, best:it.best || '', color: sigColor(it.score), kind: kindLabel(it.kind), why: it.why || '', miss: it.miss || '', probe: it.probe || '', calibrate: it.calibrate || '', reason: it.reason || '', least: it.least || '', leastScore: it.leastScore, leastSignal: it.leastSignal || '', leastColor: it.leastScore != null ? sigColor(it.leastScore) : 'var(--c-hex-7e9186)', options: (it.options || []).map(o => ({text:o.text, score:o.score, signal:o.signal, reason:o.reason || '', chosen:!!o.chosen, least:!!o.least, flag:o.flag || '', positive:o.positive || '', color: sigColor(o.score), weight: (o.chosen || o.least) ? '800' : '400'}))});
     v.rpScaleNote = (rp && rp.prof && rp.prof.scaleNote) || (B ? B.SCALE_NOTE : '');
     v.pHasReport = !!rp;
-    const bandColor = b => b === 'Strong match' ? G : b === 'Meets profile' ? GL : b === 'Validate in interview' ? AMB : b === 'Below profile' ? '#F0A070' : RED;
-    const sevSty = s => s === 'critical' ? {bg:RED, fg:'#04120B'} : s === 'meaningful' ? {bg:AMB, fg:'#04120B'} : {bg:'rgba(160,190,170,.18)', fg:'#D5DED7'};
+    const bandColor = b => b === 'Strong match' ? G : b === 'Meets profile' ? GL : b === 'Validate in interview' ? AMB : b === 'Below profile' ? 'var(--c-hex-f0a070)' : RED;
+    const sevSty = s => s === 'critical' ? {bg:RED, fg:'var(--c-hex-04120b)'} : s === 'meaningful' ? {bg:AMB, fg:'var(--c-hex-04120b)'} : {bg:'var(--c-rgba-160-190-170-18)', fg:'var(--c-hex-d5ded7)'};
     if (rp) {
       const r = rp.res;
       v.rpOverall = r.overall; v.rpBand = r.band; v.rpColor = bandColor(r.band); v.rpNote = r.bandNote;
@@ -933,8 +990,9 @@ export class PeakCombine extends React.Component<any, any> {
       v.rpPace = r.pace ? ('Completed in ' + r.pace.totalMin + ' min \u00b7 median ' + r.pace.medianSec + 's per item' + (r.twoPick ? ' \u00b7 two picks per scenario' : '')) : (r.twoPick ? 'Two picks per scenario' : '');
       v.rpTooFast = !!(r.pace && r.pace.tooFast);
       v.rpPilot = !!r.pilot; v.rpPilotNote = r.pilotNote || ''; v.rpInsights = (r.insights || []).map(x => ({title:x.title, q:x.q, answer:x.answer})); v.rpHasInsights = !!(r.insights && r.insights.length);
+      v.rpProbes = (r.probes || []).map(x => ({profile:x.profile, desc:x.desc, rule:x.rule, probe:x.probe, evidence:(x.evidence || []).map(evRow)})); v.rpHasProbes = v.rpProbes.length > 0;
       v.rpScen = r.scenario.answered + '/' + r.scenario.total + ' scenarios · avg ' + r.scenario.avg + ' · ' + r.scenario.elite + ' elite · ' + r.scenario.weak + ' weak';
-      v.rpComps = r.comps.map(c => { const col = c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? '#E9D9B0' : AMB; return {name:c.name, meta:(c.critical ? '★ ' : '') + c.weight + '%' + (c.breach ? ' · below floor ' + c.floor : ''), scoreTxt: c.scored ? String(c.score) : 'off', color: c.scored ? col : '#5C6B61', pct: (c.scored ? c.score : 0) + '%', floorPct: c.floor + '%'}; });
+      v.rpComps = r.comps.map(c => { const col = c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? 'var(--c-hex-e9d9b0)' : AMB; return {name:c.name, meta:(c.critical ? '★ ' : '') + c.weight + '%' + (c.breach ? ' · below floor ' + c.floor : ''), scoreTxt: c.scored ? String(c.score) : 'off', color: c.scored ? col : 'var(--c-hex-5c6b61)', pct: (c.scored ? c.score : 0) + '%', floorPct: c.floor + '%'}; });
       v.rpFlags = r.redFlags.map(f => ({sev:f.severity, label:f.label, context:f.context, chosen:f.chosen || '', better:f.better || '', why:f.why || '', comp:(rp.prof.competencies[f.comp] || {}).name || f.comp, ...sevSty(f.severity)}));
       v.rpFlagCount = r.redFlags.length; v.rpNoFlags = !r.redFlags.length;
       const compNameOf = k => (rp.prof.competencies[k] || {}).name || k;
@@ -945,20 +1003,20 @@ export class PeakCombine extends React.Component<any, any> {
       v.rpHasEvidence = !!(r.items && r.items.length);
       const groups = {};
       (r.items || []).forEach(it => { (groups[it.compName] = groups[it.compName] || []).push(evRow(it)); });
-      v.rpItemGroups = Object.keys(groups).map(name => { const c = r.comps.find(x => x.name === name) || {}; return {name, scoreTxt: c.score != null ? c.score + ' / 100' : '', color: c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? '#E9D9B0' : AMB, items: groups[name].slice().sort((a, b) => a.score - b.score)}; });
+      v.rpItemGroups = Object.keys(groups).map(name => { const c = r.comps.find(x => x.name === name) || {}; return {name, scoreTxt: c.score != null ? c.score + ' / 100' : '', color: c.breach ? RED : c.score >= 75 ? G : c.score >= 55 ? 'var(--c-hex-e9d9b0)' : AMB, items: groups[name].slice().sort((a, b) => a.score - b.score)}; });
       v.rpItemCount = (r.items || []).length;
       v.rpItemsOpen = !!st.rpItemsOpen; v.toggleItems = () => this.setState({rpItemsOpen: !this.state.rpItemsOpen});
       v.rpItemsBtn = st.rpItemsOpen ? 'Hide the answer trail' : 'Show every answer (' + v.rpItemCount + ')';
-    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; v.rpItemGroups = []; v.rpHasEvidence = false; v.rpItemsOpen = false; v.rpPilot = false; v.rpInsights = []; v.rpHasInsights = false; v.rpPace = ''; v.rpTooFast = false; }
-    const lvColors = {High:[GL,'rgba(16,185,129,.12)'], Medium:['#E9D9B0','rgba(245,184,74,.1)'], Low:[AMB,'rgba(245,184,74,.12)'], '\u2014':['#5C6B61','transparent'], 'In review':['#8FA396','rgba(160,190,170,.08)'], Insufficient:['#5C6B61','transparent']};
+    } else { v.rpComps = []; v.rpFlags = []; v.rpPositives = []; v.rpConsistency = []; v.rpFollowUps = []; v.rpRefs = []; v.rpItemGroups = []; v.rpHasEvidence = false; v.rpItemsOpen = false; v.rpPilot = false; v.rpInsights = []; v.rpHasInsights = false; v.rpPace = ''; v.rpTooFast = false; v.rpProbes = []; v.rpHasProbes = false; }
+    const lvColors = {High:[GL,'var(--c-rgba-16-185-129-12)'], Medium:['var(--c-hex-e9d9b0)','var(--c-rgba-245-184-74-1)'], Low:[AMB,'var(--c-rgba-245-184-74-12)'], '\u2014':['var(--c-hex-5c6b61)','transparent'], 'In review':['var(--c-hex-8fa396)','var(--c-rgba-160-190-170-08)'], Insufficient:['var(--c-hex-5c6b61)','transparent']};
     if (p.comp) {
-      v.pBars = D.comps.map(c => { const val = p.comp[c.id]; const has = val != null; return {name:c.name, valTxt: has ? val.toFixed(1) : '\u2014', valColor: !has ? '#5C6B61' : val>=3.5 ? GL : val>=2.8 ? '#E9F0EA' : AMB, pct: has ? Math.round(val/5*100)+'%' : '0%', fill: val>=3.5 ? 'linear-gradient(90deg,rgba(16,185,129,.5),#10B981)' : 'linear-gradient(90deg,rgba(245,184,74,.4),#F5B84A)'}; });
+      v.pBars = D.comps.map(c => { const val = p.comp[c.id]; const has = val != null; return {name:c.name, valTxt: has ? val.toFixed(1) : '\u2014', valColor: !has ? 'var(--c-hex-5c6b61)' : val>=3.5 ? GL : val>=2.8 ? 'var(--c-hex-e9f0ea)' : AMB, pct: has ? Math.round(val/5*100)+'%' : '0%', fill: val>=3.5 ? 'linear-gradient(90deg,var(--c-rgba-16-185-129-5),var(--c-hex-10b981))' : 'linear-gradient(90deg,var(--c-rgba-245-184-74-4),var(--c-hex-f5b84a))'}; });
       v.pStrength = D.weights.filter(w => w.id !== 'wdi').map(w => { const lv = (p.strength||{})[w.id] || '\u2014'; const c = lvColors[lv] || lvColors['\u2014']; return {src: w.id === 'sjt' ? 'Sales decisions (bank)' : w.label, level:lv, color:c[0], bg:c[1]}; });
     } else { v.pBars = []; v.pStrength = []; }
     v.pR1 = p.r1 ? p.r1.toFixed(1) : '\u2014'; v.pR2 = p.r2 ? p.r2.toFixed(1) : '\u2014';
     const pd = (p.r1 && p.r2) ? p.r2-p.r1 : null;
     v.pDelta = pd!=null ? ((pd>=0?'+':'')+pd.toFixed(1)) : '';
-    v.pDeltaColor = pd!=null && pd>=0.8 ? GL : pd!=null && pd<=0.2 ? AMB : '#A7B5AB';
+    v.pDeltaColor = pd!=null && pd>=0.8 ? GL : pd!=null && pd<=0.2 ? AMB : 'var(--c-hex-a7b5ab)';
     v.pAgreeTxt = 'Evaluator agreement: ' + (p.agree||'\u2014');
     v.pAgreeColor = p.agree==='Flagged' ? AMB : GL;
     v.pStrongest = p.strongest || '\u2014'; v.pConcerns = p.concerns || '\u2014'; v.pOpen = p.open || '\u2014';
@@ -984,8 +1042,8 @@ export class PeakCombine extends React.Component<any, any> {
     const allTr = (LIVE_ENABLED && this.live.view) ? (this.live.view.transcripts || []) : [];
     const trRow = t => { const rv = t.review || {}; const show = !!st.trShow[t.id]; return {id:t.id, kind:t.kind, title:t.title || t.kind, meta: t.t + ' · ' + t.by + (t.source ? ' · ' + t.source : ''), txt:t.txt, show, toggle: () => this.setState({trShow:{...this.state.trShow, [t.id]:!show}}), toggleTxt: show ? 'Hide transcript' : 'Read the transcript',
       hasReview: t.status === 'done' && !!rv.summary, statusTxt: t.status === 'done' ? (/^First call/i.test(t.kind || '') ? 'First-call evaluation · advisory — leadership decides' : 'AI-assisted read · advisory — evaluators decide') : t.status === 'off' ? 'No AI evaluation (key not set) — read it directly' : t.status === 'failed' ? 'Evaluation failed' + (rv.error ? ': ' + rv.error : '') : t.status === 'pending' ? 'Evaluation in progress…' : '',
-      statusColor: t.status === 'done' ? GL : t.status === 'failed' ? AMB : '#7E9186',
-      summary: rv.summary || '', comps: (rv.competencies || []).map(c => ({name:c.name || c.id, rating: c.rating != null ? c.rating + ' / 5' : 'no evidence', color: c.rating == null ? '#5C6B61' : c.rating >= 4 ? GL : c.rating >= 3 ? '#E9F0EA' : AMB, quotes:(c.evidence || []).slice(0, 2).map(e => ({quote:e.quote || '', note:e.note || ''})), note:c.note || ''})),
+      statusColor: t.status === 'done' ? GL : t.status === 'failed' ? AMB : 'var(--c-hex-7e9186)',
+      summary: rv.summary || '', comps: (rv.competencies || []).map(c => ({name:c.name || c.id, rating: c.rating != null ? c.rating + ' / 5' : 'no evidence', color: c.rating == null ? 'var(--c-hex-5c6b61)' : c.rating >= 4 ? GL : c.rating >= 3 ? 'var(--c-hex-e9f0ea)' : AMB, quotes:(c.evidence || []).slice(0, 2).map(e => ({quote:e.quote || '', note:e.note || ''})), note:c.note || ''})),
       strengths: rv.strengths || [], concerns: rv.concerns || [], followUps: rv.followUps || [], caution: rv.caution || '',
       canRerun: LIVE_ENABLED && isMgr, rerun: () => this.rerunTranscript(t.id), rerunBusy: st.busy === 'tr:' + t.id, rerunTxt: st.busy === 'tr:' + t.id ? 'Evaluating\u2026' : (t.status === 'done' ? 'Run evaluation again' : 'Run evaluation'),
       isCall: /^First call/i.test(t.kind || ''), grade: t.grade || rv.grade || '', gradeColor: GRADE_COLOR(t.grade || rv.grade), bullets: rv.bullets || [], covered: rv.alreadyCovered || [], askNext: rv.askNext || [], gradeRationale: rv.gradeRationale || '', screenerNotes: t.notes || rv.screenerNotes || ''}; };
@@ -995,7 +1053,7 @@ export class PeakCombine extends React.Component<any, any> {
     v.trMsgColor = /^Could not|^Paste/.test(st.tr.msg || '') ? AMB : GL;
     v.setTrKind = e => this.setState({tr:{...this.state.tr, kind:e.target.value}}); v.setTrTitle = e => this.setState({tr:{...this.state.tr, title:e.target.value}}); v.setTrTxt = e => this.setState({tr:{...this.state.tr, txt:e.target.value, msg:''}});
     v.pickTrFile = e => this.readTranscriptFile(e); v.submitTr = () => this.submitTranscript(p.id);
-    v.trBusy = st.busy === 'tr'; v.trOk = st.tr.txt.trim().length >= 200 && st.busy !== 'tr'; v.trBtnBg = v.trOk ? G : '#20302680';
+    v.trBusy = st.busy === 'tr'; v.trOk = st.tr.txt.trim().length >= 200 && st.busy !== 'tr'; v.trBtnBg = v.trOk ? G : 'var(--c-hex-20302680)';
     v.trCount = st.tr.txt.trim().length ? st.tr.txt.trim().length.toLocaleString() + ' characters' : '';
     v.trNotes = st.tr.notes || ''; v.setTrNotes = e => this.setState({tr:{...this.state.tr, notes:e.target.value}});
     v.trIsCall = /^First call/i.test(st.tr.kind || '');
@@ -1015,12 +1073,12 @@ export class PeakCombine extends React.Component<any, any> {
     v.decColor = pDec ? (pDec.decision === 'Advance' ? G : pDec.decision === 'Hold' ? AMB : RED) : 'transparent';
     v.pRecBtns = ['Advance','Hold','Do Not Advance'].map(r => ({label:r,
       bg: st.dec.rec===r ? (r==='Advance'?G:r==='Hold'?AMB:RED) : 'transparent',
-      fg: st.dec.rec===r ? '#04120B' : (r==='Advance'?GL:r==='Hold'?AMB:RED),
-      border: r==='Advance'?'rgba(16,185,129,.4)':r==='Hold'?'rgba(245,184,74,.4)':'rgba(248,113,113,.4)',
+      fg: st.dec.rec===r ? 'var(--c-hex-04120b)' : (r==='Advance'?GL:r==='Hold'?AMB:RED),
+      border: r==='Advance'?'var(--c-rgba-16-185-129-4)':r==='Hold'?'var(--c-rgba-245-184-74-4)':'var(--c-rgba-248-113-113-4)',
       on: () => this.setState({dec:{...this.state.dec, rec:r}})}));
     v.decNote = st.dec.note; v.setDecNote = e => this.setState({dec:{...this.state.dec, note:e.target.value}});
     const decOk = !!st.dec.rec && st.dec.note.trim().length > 20;
-    v.decBlocked = !decOk; v.decBtnBg = decOk ? G : '#20302680';
+    v.decBlocked = !decOk; v.decBtnBg = decOk ? G : 'var(--c-hex-20302680)';
     v.recordDecision = () => { const d = this.state.dec; if (!d.rec || d.note.trim().length <= 20) return; const entry = {candId:p.id, cand:p.name, role:p.role, decision:d.rec, by:(user ? user.short : 'Staff') + ' (' + roleLabel(st.role) + ')', t:'Today ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}), rationale:d.note.trim(), agree:p.agree || '—'}; this.setState({decisions:[entry, ...this.state.decisions], dec:{rec:null, note:''}}); };
     v.decisionRows = allDecisions.map(d => ({...d, bg: d.decision === 'Advance' ? G : d.decision === 'Hold' ? AMB : RED}));
     // compare
@@ -1041,17 +1099,17 @@ export class PeakCombine extends React.Component<any, any> {
     v.bkThresh = bkS ? TH.map(([k, label]) => ({label, val: bkS.thresholds[k], set: e => setBk({thresholds:{...bkS.thresholds, [k]: parseInt(e.target.value, 10) || 0}})})) : [];
     v.bkCompRows = bkP ? Object.entries(bkP.competencies).map(([k, c]) => ({name:c.name, w: bkS.weights[k], floor: bkS.floors[k],
       setW: e => setBk({weights:{...bkS.weights, [k]: parseInt(e.target.value, 10)}}), setFloor: e => setBk({floors:{...bkS.floors, [k]: parseInt(e.target.value, 10)}}),
-      critTxt: bkS.critical[k] ? '\u2605 critical' : 'standard', critBg: bkS.critical[k] ? 'rgba(248,113,113,.14)' : 'transparent', critFg: bkS.critical[k] ? RED : '#8FA396', toggleCrit: () => setBk({critical:{...bkS.critical, [k]: !bkS.critical[k]}}),
-      scoredTxt: bkS.scored[k] ? 'on' : 'off', scoredBg: bkS.scored[k] ? 'rgba(16,185,129,.14)' : 'transparent', scoredFg: bkS.scored[k] ? GL : '#8FA396', toggleScored: () => setBk({scored:{...bkS.scored, [k]: !bkS.scored[k]}})})) : [];
+      critTxt: bkS.critical[k] ? '\u2605 critical' : 'standard', critBg: bkS.critical[k] ? 'var(--c-rgba-248-113-113-14)' : 'transparent', critFg: bkS.critical[k] ? RED : 'var(--c-hex-8fa396)', toggleCrit: () => setBk({critical:{...bkS.critical, [k]: !bkS.critical[k]}}),
+      scoredTxt: bkS.scored[k] ? 'on' : 'off', scoredBg: bkS.scored[k] ? 'var(--c-rgba-16-185-129-14)' : 'transparent', scoredFg: bkS.scored[k] ? GL : 'var(--c-hex-8fa396)', toggleScored: () => setBk({scored:{...bkS.scored, [k]: !bkS.scored[k]}})})) : [];
     v.bkWSum = bkS ? Object.entries(bkS.weights).filter(([k]) => bkS.scored[k]).reduce((a, [, w]) => a + w, 0) + '%' : '';
-    v.bkProfChips = (B ? B.ROLE_LIST : []).map(r => ({label:r.name, on: () => { const role = Object.keys(D.profileByRole || {}).find(k => D.profileByRole[k] === r.id) || this.state.weightsRole; this.setState({weightsRole:role, bankItemId:null, bankDraft:null, bankSaved:''}); }, bg: bkPid === r.id ? 'rgba(16,185,129,.14)' : 'transparent', fg: bkPid === r.id ? GL : '#8FA396'}));
+    v.bkProfChips = (B ? B.ROLE_LIST : []).map(r => ({label:r.name, on: () => { const role = Object.keys(D.profileByRole || {}).find(k => D.profileByRole[k] === r.id) || this.state.weightsRole; this.setState({weightsRole:role, bankItemId:null, bankDraft:null, bankSaved:''}); }, bg: bkPid === r.id ? 'var(--c-rgba-16-185-129-14)' : 'transparent', fg: bkPid === r.id ? GL : 'var(--c-hex-8fa396)'}));
     // question bank — every scored scenario / worst-move item of the selected profile with its rubric and rationale; scores, labels, wording, and rationale are editable
     const bkEdits = editsFor(bkPid) || {};
     const bkRole = bkP ? B.applyEdits(bkP, bkEdits) : null;
     const bankItems = bkRole ? [...bkRole.scenarios, ...bkRole.worst] : [];
     const bankSelId = bankItems.some(q => q.id === st.bankItemId) ? st.bankItemId : (bankItems[0] || {}).id;
     const bq = bankItems.find(q => q.id === bankSelId) || null;
-    v.bankList = bankItems.map((q, i) => ({num: String(i + 1).padStart(2, '0'), title: ((bkRole.competencies[q.comp] || {}).name || q.comp) + ' \u00b7 ' + (q.title || q.id.toUpperCase()), ver: q.kind === 'worst' ? 'worst move' : 'scenario', edited: !!bkEdits[q.id], bg: q.id === bankSelId ? 'rgba(16,185,129,.08)' : '#0F1611', border: q.id === bankSelId ? 'rgba(16,185,129,.4)' : 'rgba(160,190,170,.13)', pick: () => this.setState({bankItemId:q.id, bankDraft:null, bankSaved:''})}));
+    v.bankList = bankItems.map((q, i) => ({num: String(i + 1).padStart(2, '0'), title: ((bkRole.competencies[q.comp] || {}).name || q.comp) + ' \u00b7 ' + (q.title || q.id.toUpperCase()), ver: q.kind === 'worst' ? 'worst move' : 'scenario', edited: !!bkEdits[q.id], bg: q.id === bankSelId ? 'var(--c-rgba-16-185-129-08)' : 'var(--c-hex-0f1611)', border: q.id === bankSelId ? 'var(--c-rgba-16-185-129-4)' : 'var(--c-rgba-160-190-170-13)', pick: () => this.setState({bankItemId:q.id, bankDraft:null, bankSaved:''})}));
     const draft = (st.bankDraft && bq && st.bankDraft.id === bq.id) ? st.bankDraft : null;
     const cur = bq ? (draft || {id:bq.id, text:bq.text, why:B.whyFor(bkRole, bq), opts:bq.opts.map(o => ({text:o.text, score:o.score, flag:o.flag || '', positive:o.positive || ''}))}) : null;
     const setDraft = fn => { const d = JSON.parse(JSON.stringify(cur)); fn(d); this.setState({bankDraft:d, bankSaved:''}); };
@@ -1076,10 +1134,10 @@ export class PeakCombine extends React.Component<any, any> {
     const wsum = Object.values(wcur).reduce((a,b)=>a+b,0);
     v.wSum = wsum; v.wSumColor = wsum===100 ? GL : AMB;
     v.wNote = wsum===100 ? 'Weights sum to 100% for ' + st.weightsRole + '. Sales decisions count once, as one source. Each role publishes its own rubric version; cohorts lock to it.' : '⚠ Weights must sum to 100% before publishing — currently ' + wsum + '%.';
-    v.wRoleChips = Object.keys(WBR).map(r => ({label:r, on: () => this.setState({weightsRole:r}), bg: st.weightsRole === r ? 'rgba(16,185,129,.14)' : 'transparent', fg: st.weightsRole === r ? GL : '#8FA396'}));
+    v.wRoleChips = Object.keys(WBR).map(r => ({label:r, on: () => this.setState({weightsRole:r}), bg: st.weightsRole === r ? 'var(--c-rgba-16-185-129-14)' : 'transparent', fg: st.weightsRole === r ? GL : 'var(--c-hex-8fa396)'}));
     v.wRows = D.weights.filter(w => w.id !== 'wdi').map(w => ({label: w.id === 'sjt' ? 'Sales decisions (self-report + scenarios)' : w.label, val: w.id === 'sjt' ? (wcur.sjt ?? 0) + (wcur.wdi ?? 0) : (wcur[w.id] ?? 0), set: e => { const all = {...(this.state.weightsByRole || D.weightsByRole || {})}; const rk = this.state.weightsRole; all[rk] = {...(all[rk] || {}), [w.id]: parseInt(e.target.value,10), ...(w.id === 'sjt' ? {wdi:0} : {})}; this.setState({weightsByRole:all}); }}));
     v.mHead = D.comps.map(c => c.name.split(' ')[0].slice(0,6));
-    v.mRows = D.weights.filter(w => w.id !== 'wdi').map(w => ({label: w.id === 'sjt' ? 'Sales decisions (bank)' : w.label, cells: D.comps.map(c => { const on = w.comps.includes(c.id); return {mark: on ? '\u25cf' : '', bg: on ? 'rgba(16,185,129,.1)' : '#0B120E', border: on ? 'rgba(16,185,129,.3)' : 'rgba(160,190,170,.07)'}; })}));
+    v.mRows = D.weights.filter(w => w.id !== 'wdi').map(w => ({label: w.id === 'sjt' ? 'Sales decisions (bank)' : w.label, cells: D.comps.map(c => { const on = w.comps.includes(c.id); return {mark: on ? '\u25cf' : '', bg: on ? 'var(--c-rgba-16-185-129-1)' : 'var(--c-hex-0b120e)', border: on ? 'var(--c-rgba-16-185-129-3)' : 'var(--c-rgba-160-190-170-07)'}; })}));
     // calibration
     v.calRows = [
       {name:'J. Whitfield', avg:'3.8', note:'skews +0.4 lenient', color:AMB},
@@ -1093,7 +1151,7 @@ export class PeakCombine extends React.Component<any, any> {
     ];
     v.fairNote = '';
     // validation
-    v.vPeriods = [['d30','30 days'],['d60','60 days'],['d90','90 days'],['d180','180 days'],['y1','1 year']].map(pp => ({label:pp[1], off: pp[0]==='d180'||pp[0]==='y1', on: () => this.setState({vPeriod:pp[0]}), bg: st.vPeriod===pp[0] ? 'rgba(16,185,129,.14)' : 'transparent', fg: (pp[0]==='d180'||pp[0]==='y1') ? '#3A453D' : st.vPeriod===pp[0] ? GL : '#8FA396'}));
+    v.vPeriods = [['d30','30 days'],['d60','60 days'],['d90','90 days'],['d180','180 days'],['y1','1 year']].map(pp => ({label:pp[1], off: pp[0]==='d180'||pp[0]==='y1', on: () => this.setState({vPeriod:pp[0]}), bg: st.vPeriod===pp[0] ? 'var(--c-rgba-16-185-129-14)' : 'transparent', fg: (pp[0]==='d180'||pp[0]==='y1') ? 'var(--c-hex-3a453d)' : st.vPeriod===pp[0] ? GL : 'var(--c-hex-8fa396)'}));
     const hires = D.hires.map(h => { const ov = st.ocRows[h.name]; return ov ? {...h, ...ov} : h; });
     v.vRows = hires.map(h => { const d = h[st.vPeriod] || {}; const f = x => x==null ? '\u2014' : x; return {name:h.name, readiness: h.readiness != null ? h.readiness.toFixed(1) : '\u2014', dials:f(d.dials), mtgs:f(d.mtgs), pipe:f(d.pipe), rev:f(d.rev), crm: d.crm!=null ? d.crm+'%' : '\u2014', mgr:f(d.mgr), coach:f(d.coach), ret:f(d.ret)}; });
     v.canRecord = isMgr;
@@ -1116,10 +1174,10 @@ export class PeakCombine extends React.Component<any, any> {
     // settings
     v.retention = st.retention; v.setRetention = e => this.setState({retention:e.target.value});
     // operational lists: schools / properties and pipeline stages (drafts commit on blur so newlines can be typed)
-    const schoolsList = st.schools || DEFAULT_SCHOOLS, stagesList = st.taStages || DEFAULT_TA_STAGES;
+    const schoolsRaw = st.schools || DEFAULT_SCHOOLS, schoolsList = schoolNames(schoolsRaw), stagesList = STAGE_NAMES;
     const parseLines = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
     v.schoolsTxt = st.schoolsDraft != null ? st.schoolsDraft : schoolsList.join('\n'); v.setSchoolsTxt = e => this.setState({schoolsDraft:e.target.value}); v.commitSchools = () => { if (this.state.schoolsDraft == null) return; this.setState({schools:parseLines(this.state.schoolsDraft), schoolsDraft:null}); };
-    v.stagesTxt = st.stagesDraft != null ? st.stagesDraft : stagesList.join('\n'); v.setStagesTxt = e => this.setState({stagesDraft:e.target.value}); v.commitStages = () => { if (this.state.stagesDraft == null) return; const l = parseLines(this.state.stagesDraft); this.setState({taStages: l.length ? l : DEFAULT_TA_STAGES, stagesDraft:null}); };
+    v.stageList = TA_STAGES.map(s => ({name:s.name, sub:s.sub || ''}));
     v.remindNow = () => this.remindNow(); v.remindMsg = st.remindMsg || ''; v.canRemind = LIVE_ENABLED && isMgr;
     v.settingsEditable = isAdminRole || isLead || isMgr; v.canEditCore = isAdminRole || isLead;
     v.auditRows = [...st.decisions.map(d => ({t:d.t, who:d.by, what:'Recorded decision: ' + d.decision + ' — ' + d.cand})), ...D.audit];
@@ -1136,13 +1194,13 @@ export class PeakCombine extends React.Component<any, any> {
     const arAns = (D.applications || {})[arC.id] || [];
     v.arName = dispName(arC); v.arSub = (st.blind ? 'blind review on' : (arC.loc + ' · ' + arC.school)) + ' · ' + arC.role + ' · submitted Tue';
     const LV = ['Specific & quantified','Partial','Vague'];
-    v.arItems = D.evQs.map((q, i) => { const r = st.arRatings[i]; return {num:'Q' + (i + 1), q, ans: arAns[i] || 'No answer on file.', btns: LV.map((l, k) => { const col = k === 0 ? G : k === 1 ? '#E9D9B0' : AMB; const on = r === k; return {label:l, on: () => this.setState({arRatings:{...this.state.arRatings, [i]:k}, arSaved:''}), bg: on ? col : 'transparent', fg: on ? '#04120B' : col, border: on ? col : 'rgba(160,190,170,.2)'}; })}; });
+    v.arItems = D.evQs.map((q, i) => { const r = st.arRatings[i]; return {num:'Q' + (i + 1), q, ans: arAns[i] || 'No answer on file.', btns: LV.map((l, k) => { const col = k === 0 ? G : k === 1 ? 'var(--c-hex-e9d9b0)' : AMB; const on = r === k; return {label:l, on: () => this.setState({arRatings:{...this.state.arRatings, [i]:k}, arSaved:''}), bg: on ? col : 'transparent', fg: on ? 'var(--c-hex-04120b)' : col, border: on ? col : 'var(--c-rgba-160-190-170-2)'}; })}; });
     const arVals = Object.values(st.arRatings), nRated = arVals.length, arAll = nRated >= D.evQs.length;
     const arScore = nRated ? arVals.reduce((a, b) => a + (2 - b), 0) / nRated : 0;
     const arLv = arScore >= 1.5 ? 'High' : arScore >= 0.8 ? 'Medium' : 'Low';
-    v.arLevel = arAll ? arLv : nRated + ' / ' + D.evQs.length; v.arLevelColor = !arAll ? '#8FA396' : arLv === 'High' ? GL : arLv === 'Medium' ? '#E9D9B0' : AMB;
+    v.arLevel = arAll ? arLv : nRated + ' / ' + D.evQs.length; v.arLevelColor = !arAll ? 'var(--c-hex-8fa396)' : arLv === 'High' ? GL : arLv === 'Medium' ? 'var(--c-hex-e9d9b0)' : AMB;
     v.arSummary = st.arDone[arC.id] ? 'Recorded: ' + st.arDone[arC.id] + '.' : arAll ? 'Evidence rating ' + arLv + ' — counts 5% toward readiness. Advancing unlocks the inventory and scenarios for the candidate.' : 'Rate all five answers to unlock the stage decision.';
-    v.arBlocked = !arAll || !!st.arDone[arC.id]; v.arBtnBg = (arAll && !st.arDone[arC.id]) ? G : '#20302680';
+    v.arBlocked = !arAll || !!st.arDone[arC.id]; v.arBtnBg = (arAll && !st.arDone[arC.id]) ? G : 'var(--c-hex-20302680)';
     v.arAdvance = () => { if (!arAll || this.state.arDone[arC.id]) return; this.setState({arDone:{...this.state.arDone, [arC.id]:'Advanced to Stage 3 · evidence ' + arLv}, arSaved:'Advanced — Stage 3 unlock email sent.'}); };
     v.arHold = () => { if (!arAll || this.state.arDone[arC.id]) return; this.setState({arDone:{...this.state.arDone, [arC.id]:'Not advanced · application stage'}, arSaved:'Recorded — standard decision message queued; add rationale in the decision log.'}); };
     v.arSaved = st.arSaved;
@@ -1168,31 +1226,62 @@ export class PeakCombine extends React.Component<any, any> {
     const sameEval = st.sch.e1 === st.sch.e2;
     const schOk = !!schC && !sameEval && (st.sch.date || '').trim() && (st.sch.time || '').trim() && st.busy !== 'sch';
     v.schWarn = st.sch.sent ? 'Invites sent — candidate portal updated; calendar holds placed for both evaluators.' : sameEval ? '⚠ Two different evaluators are required — independent scoring is the point.' : !schC ? 'Pick a candidate who has no session yet.' : !assessed(schC) ? 'This candidate has not finished the assessment yet. You can still schedule — the scouting report lands when they finish.' : '';
-    v.schWarnColor = st.sch.sent ? GL : sameEval ? AMB : !schC ? '#5C6B61' : !assessed(schC) ? '#E9D9B0' : '#5C6B61';
+    v.schWarnColor = st.sch.sent ? GL : sameEval ? AMB : !schC ? 'var(--c-hex-5c6b61)' : !assessed(schC) ? 'var(--c-hex-e9d9b0)' : 'var(--c-hex-5c6b61)';
     v.schMsg = st.sch.msg || ''; v.schWarnings = st.sch.warn || [];
-    v.schBlocked = !schOk; v.schBtnBg = schOk ? G : '#20302680';
+    v.schBlocked = !schOk; v.schBtnBg = schOk ? G : 'var(--c-hex-20302680)';
     const uShort = id => (users.find(u => u.id === id) || {}).short || id;
     v.sendSchedule = () => { const s = this.state.sch; const c = schedCands.find(x => x.id === s.cand); if (!c || s.e1 === s.e2) return; const entry = {candId:c.id, cand:c.name, when:whenTxt(s.date, s.time, tzShort), evals:uShort(s.e1) + ' + ' + uShort(s.e2), link:(s.link || '').trim() || 'meet.peaksportsmgmt.com/combine-' + c.anon.replace('Candidate #',''), ver:'v1.2', status:'Invites sent'}; const next = schedCands.filter(x => x.id !== c.id)[0]; this.setState({scheduled:[entry, ...this.state.scheduled], sch:{...s, cand: next ? next.id : '', sent:'yes', msg:'Session saved (demo) — in live mode the candidate and both evaluators are emailed, and a Google Calendar invite goes out when the calendar is connected.', warn:[]}}); };
     v.schedList = [...st.scheduled, ...sessSeed.map(s => ({...s, status: s.status || 'Confirmed'}))];
-    // ===== pipeline board (Jobs tab): one column per stage, one board per role + school =====
-    const stageNames = stagesList;
-    const demoJobs = () => { const m = {}; D.candidates.forEach(c => { const k = c.role + '|' + (c.program || ''); if (!m[k]) m[k] = {id:k, title:c.role, program:c.program || '', label:c.role + (c.program ? ' \u00b7 ' + c.program : ''), status:'Open', shareEnabled:true, applyEnabled:true, shareLink:'', applyLink:'', n:0}; m[k].n++; }); return Object.values(m); };
-    const jobs = LIVE_ENABLED ? (D.jobs || []) : demoJobs();
+    // ===== pipeline board (Jobs tab): one board per job (role + school), the real hiring stages, decisions that wait until the candidate is told =====
+    const stageNames = STAGE_NAMES;
+    const S_SECOND = 1, S_VP = 3, S_AD = 5, S_OFFER = 6, S_HIRED = 7, S_NMF = 8;
+    const shortStage = i => (TA_STAGES[i] || {}).short || (TA_STAGES[i] || {}).name || '';
+    const demoJobs = () => { const m = {}; D.candidates.forEach(c => { const k = c.role + '|' + (c.program || ''); if (!m[k]) m[k] = {id:k, title:c.role, program:c.program || '', label:c.role + (c.program ? ' \u00b7 ' + c.program : ''), status: st.jobOver[k] || 'Open', shareEnabled:true, applyEnabled:true, shareLink:'', applyLink:'', n:0, merged:false, createdAt:''}; m[k].n++; }); return Object.values(m); };
+    const jobsAll = LIVE_ENABLED ? (D.jobs || []).map(j => ({...j, status: st.jobOver[j.id] || j.status})) : demoJobs();
+    const jobs = jobsAll.filter(j => !j.merged);
     const jobOf = c => LIVE_ENABLED ? c.jobId : (c.role + '|' + (c.program || ''));
-    const selJobId = jobs.some(j => j.id === st.board.job) ? st.board.job : (jobs[0] || {}).id;
+    const isOpenJob = j => (j.status || 'Open') === 'Open';
+    // likely duplicates: same role, same school once alternate names are normalized; the job with the most candidates is kept
+    const dupInfo = {};
+    Object.values(dupeGroups(jobs, schoolsRaw)).forEach(g => { if (g.length < 2) return; const canon = g.slice().sort((x, y) => (y.n - x.n) || (isOpenJob(y) ? 1 : 0) - (isOpenJob(x) ? 1 : 0) || String(x.createdAt || '').localeCompare(String(y.createdAt || '')))[0]; g.forEach(j => { dupInfo[j.id] = {canonId: canon.id, isDup: j.id !== canon.id, siblings: g.filter(x => x.id !== j.id)}; }); });
+    const schoolsParsed = parseSchools(schoolsRaw);
+    const canonSchoolName = j => { const n = normSchool(j.program); const hit = schoolsParsed.find(s => s.norms.includes(n)); if (hit) return hit.name; const g = dupInfo[j.id]; if (g && g.isDup) { const canon = jobs.find(x => x.id === g.canonId); if (canon) return canon.program || ''; } return j.program || ''; };
+    const selJobId = jobs.some(j => j.id === st.board.job) ? st.board.job : ((jobs.find(isOpenJob) || jobs[0] || {}).id || '');
     const selJob = jobs.find(j => j.id === selJobId) || null;
+    const jobCands = D.candidates.filter(c => selJob && jobOf(c) === selJob.id);
     v.vBoard = st.aview === 'board';
-    v.boardJobs = jobs.map(j => ({id:j.id, label:j.label, n:j.n, status:j.status, on: () => this.setState({board:{...this.state.board, job:j.id, msg:''}}), bg: j.id === selJobId ? 'rgba(16,185,129,.14)' : 'transparent', fg: j.id === selJobId ? GL : '#8FA396', border: j.id === selJobId ? 'rgba(16,185,129,.45)' : 'rgba(160,190,170,.2)'}));
-    v.boardEmpty = jobs.length === 0; v.boardIsMgr = isMgr; v.boardLive = LIVE_ENABLED;
-    v.boardTitle = selJob ? selJob.title : ''; v.boardProgram = selJob ? (selJob.program || 'No school / property set') : ''; v.boardStatus = selJob ? selJob.status : 'Open';
+    v.boardEmpty = jobs.length === 0; v.boardIsMgr = isMgr; v.boardLive = LIVE_ENABLED; v.hasSelJob = !!selJob;
+    const openCount = jobs.filter(isOpenJob).length, closedCount = jobs.length - openCount;
+    v.jobCountsText = 'Pick a job to see its pipeline. ' + openCount + ' open, ' + closedCount + ' closed or filled.';
+    // job picker
+    const jp = st.jp || {open:false, q:'', showClosed:false};
+    const qn = (jp.q || '').toLowerCase().trim();
+    const visibleJobs = jobs.filter(j => (jp.showClosed || isOpenJob(j) || j.id === selJobId) && (!qn || (j.title + ' ' + (j.program || '') + ' ' + canonSchoolName(j)).toLowerCase().includes(qn)));
+    const bySchool = {};
+    visibleJobs.forEach(j => { const k = canonSchoolName(j); (bySchool[k] = bySchool[k] || []).push(j); });
+    v.jpGroups = Object.keys(bySchool).sort((x, y) => x === '' ? 1 : y === '' ? -1 : x.localeCompare(y)).map(k => {
+      const list = bySchool[k].slice().sort((x, y) => ((isOpenJob(y) ? 1 : 0) - (isOpenJob(x) ? 1 : 0)) || (y.n - x.n));
+      const total = list.reduce((n, j) => n + j.n, 0);
+      return { school: k ? k.toUpperCase() : 'NO SCHOOL SET', summary: list.length + (list.length === 1 ? ' job \u00b7 ' : ' jobs \u00b7 ') + total + (total === 1 ? ' candidate' : ' candidates'),
+        jobs: list.map(j => { const sel = j.id === selJobId, inactive = !isOpenJob(j), dup = !!(dupInfo[j.id] && dupInfo[j.id].isDup); return { id:j.id, role:j.title, dup, dupNote: dup ? 'Entered as \u201c' + (j.program || 'no school') + '\u201d \u00b7 likely duplicate' : '', inactive, statusText:(j.status || 'Closed').toUpperCase(), selected:sel, count:j.n, rowBg: sel ? 'var(--c-rgba-16-185-129-12)' : 'transparent', rowShadow: sel ? 'inset 3px 0 0 var(--c-hex-10b981)' : 'none', roleColor: inactive ? 'var(--c-hex-7e9186)' : 'var(--c-hex-e9f0ea)', countBg: inactive ? 'var(--c-rgba-160-190-170-12)' : sel ? G : 'var(--c-rgba-16-185-129-16)', countFg: inactive ? 'var(--c-hex-8fa396)' : sel ? 'var(--c-hex-04120b)' : GL,
+          pick: () => this.setState({board:{...this.state.board, job:j.id, msg:''}, jp:{...this.state.jp, open:false, q:''}, jsOpen:false, strandedOpen:false}) }; }) };
+    });
+    v.jpNoResults = v.jpGroups.length === 0;
+    v.jpOpen = !!jp.open; v.toggleJp = () => this.setState({jp:{...this.state.jp, open:!this.state.jp.open}}); v.closeJp = () => this.setState({jp:{...this.state.jp, open:false}});
+    v.jpQ = jp.q || ''; v.setJpQ = e => this.setState({jp:{...this.state.jp, q:e.target.value}});
+    v.jpShowClosed = !!jp.showClosed; v.toggleJpClosed = () => this.setState({jp:{...this.state.jp, showClosed:!this.state.jp.showClosed}}); v.jpClosedTxt = 'Show closed & filled jobs (' + closedCount + ')';
+    v.selRole = selJob ? selJob.title : 'No jobs yet'; v.selMeta = selJob ? ((selJob.program || 'No school set') + ' \u00b7 ' + jobCands.length + (jobCands.length === 1 ? ' candidate \u00b7 ' : ' candidates \u00b7 ') + (selJob.status || 'Open')) : 'Create a job to start a pipeline';
+    v.boardTitle = selJob ? selJob.title : ''; v.boardProgram = selJob ? (selJob.program || 'No school / property set') : ''; v.boardStatus = selJob ? selJob.status : 'Open'; v.boardTotal = jobCands.length;
     v.boardShareLink = selJob ? selJob.shareLink : ''; v.boardApplyLink = selJob ? selJob.applyLink : '';
     v.boardShareOn = !!(selJob && selJob.shareEnabled); v.boardApplyOn = !!(selJob && selJob.applyEnabled);
     v.copyShare = () => { if (selJob) this.copyBoardLink(selJob.shareLink); }; v.copyApply = () => { if (selJob) this.copyBoardLink(selJob.applyLink); };
     v.toggleShare = () => { if (selJob) this.toggleJobFlag(selJob, 'share_enabled', !selJob.shareEnabled); }; v.toggleApply = () => { if (selJob) this.toggleJobFlag(selJob, 'apply_enabled', !selJob.applyEnabled); };
     v.jobStatusOpts = ['Open', 'Paused', 'Filled', 'Closed'].map(s => ({id:s, label:s})); v.setJobStatus = e => { if (selJob) this.setJobStatus(selJob, e.target.value); };
     v.boardMsg = st.board.msg || st.flash.board || '';
-    const postCands = D.candidates.filter(c => selJob && jobOf(c) === selJob.id);
-    // job posting (careers page) — draft fields commit on Save; links per channel carry the utm parameters ads need
+    // job settings (collapsed): posting, links, tracking, sources, duplicates
+    v.jsOpen = !!st.jsOpen; v.toggleJs = () => this.setState({jsOpen:!this.state.jsOpen}); v.jsLabel = st.jsOpen ? 'Hide job settings' : 'Job settings';
+    v.postOpen = !!st.postOpen; v.togglePost = () => this.setState({postOpen:!this.state.postOpen}); v.postToggleLabel = st.postOpen ? 'Hide posting' : 'Edit posting';
+    const postCands = jobCands;
     const postD = st.posting && selJob && st.posting.jobId === selJob.id ? st.posting : (selJob ? {jobId:selJob.id, description:selJob.description || '', location:selJob.location || '', comp:selJob.comp || '', employment_type:selJob.employmentType || 'Full-time'} : null);
     const setPost = k => e => this.setState({posting:{...(postD || {}), [k]: e.target.value}, postMsg:''});
     v.postFields = postD ? [{label:'Location', ph:'e.g. Lubbock, TX \u00b7 on site', val:postD.location, set:setPost('location')}, {label:'Compensation', ph:'e.g. $55\u201365K base + commission', val:postD.comp, set:setPost('comp')}] : [];
@@ -1200,50 +1289,100 @@ export class PeakCombine extends React.Component<any, any> {
     v.postDesc = postD ? postD.description : ''; v.setPostDesc = setPost('description');
     v.postDirty = !!(st.posting && selJob && st.posting.jobId === selJob.id); v.savePosting = () => this.savePosting(selJob); v.postBusy = st.busy === 'post';
     v.postOn = !!(selJob && selJob.posted); v.togglePosted = () => this.togglePosted(selJob); v.postMsg = st.postMsg || '';
-    v.postStatusTxt = !selJob ? '' : selJob.posted ? (selJob.status === 'Open' && selJob.applyEnabled ? 'Listed on the careers page' : 'Marked as posted, but hidden because the job is ' + (selJob.status !== 'Open' ? selJob.status.toLowerCase() : 'not accepting applications')) : 'Not on the careers page';
-    v.postStatusColor = selJob && selJob.posted && selJob.status === 'Open' && selJob.applyEnabled ? GL : selJob && selJob.posted ? AMB : '#7E9186';
-    const careersUrl = () => window.location.origin + (this.isHarness() ? window.location.pathname + '?live=1&careers=1' : '/careers');
+    v.postStatusTxt = !selJob ? '' : selJob.posted ? (selJob.status === 'Open' && selJob.applyEnabled ? 'Listed on the careers page' : 'Marked as posted, but hidden because the job is ' + (selJob.status !== 'Open' ? String(selJob.status).toLowerCase() : 'not accepting applications')) : 'Not on the careers page';
+    v.postStatusColor = selJob && selJob.posted && selJob.status === 'Open' && selJob.applyEnabled ? GL : selJob && selJob.posted ? AMB : 'var(--c-hex-7e9186)';
+    const careersUrl = () => window.location.origin + (window.location.pathname === '/' ? '/careers' : window.location.pathname + '?live=1&careers=1');
     v.careersUrl = careersUrl();
-    const jobSlug = selJob ? slugify(selJob.title + ' ' + selJob.program) : '';
+    const jobSlug = selJob ? slugify(selJob.title + ' ' + (selJob.program || '')) : '';
     v.channelLinks = selJob ? CHANNEL_LINKS.map(ch => { const url = selJob.applyLink + '&' + ch.q + '&utm_campaign=' + jobSlug; return {id:ch.id, label:ch.label, url, copy: () => this.copyBoardLink(url)}; }) : [];
     v.copyCareers = () => this.copyBoardLink(v.careersUrl);
     v.boardSources = selJob ? srcCount(postCands) : []; v.hasBoardSources = v.boardSources.length > 0;
+    v.sourcesText = v.boardSources.length ? v.boardSources.map(s => s.n + ' ' + s.label.toLowerCase() + ' (' + s.pct + ')').join(' \u00b7 ') : 'No candidates on this job yet';
     const campaigns = {}; postCands.filter(c => c.source === 'self' && c.campaign).forEach(c => { const k = (c.sourceLabel || '') + ' \u00b7 ' + c.campaign + (c.adContent ? ' \u00b7 ' + c.adContent : ''); campaigns[k] = (campaigns[k] || 0) + 1; });
-    v.boardCampaigns = Object.entries(campaigns).sort((a, b) => b[1] - a[1]).map(([label, n]) => ({label, n}));
-    const stageOf = c => (!LIVE_ENABLED && st.taLocal[c.id]) || c.stageTxt || c.taStage || (c.stage >= 6 ? 'Offer' : c.stage >= 5 ? 'Combine' : c.stage >= 4 ? 'Assessment' : 'Applied');
+    v.boardCampaigns = Object.entries(campaigns).sort((x, y) => y[1] - x[1]).map(([label, n]) => ({label, n}));
+    const selDup = selJob ? dupInfo[selJob.id] : null;
+    v.dupList = selDup ? selDup.siblings.map(j => ({id:j.id, label:(j.program || 'no school') + ' \u00b7 ' + j.n + (j.n === 1 ? ' candidate' : ' candidates') + (isOpenJob(j) ? '' : ' \u00b7 ' + j.status)})) : [];
+    v.hasDups = v.dupList.length > 0 && LIVE_ENABLED;
+    v.dupTitle = selDup && selDup.isDup ? 'This looks like a duplicate of another ' + selJob.title + ' job at this school.' : 'Other entries that look like this same job:';
+    v.mergeDups = () => { if (selJob && selDup) this.mergeJobs(selDup.siblings.map(j => j.id), selJob.id, selJob.label); };
+    v.mergeBusy = st.busy === 'merge';
+    v.mergeLabel = selDup && selDup.isDup ? 'Merge all into this one' : 'Merge them into this job';
+    // pipeline columns
+    const local = c => (!LIVE_ENABLED ? st.taLocal[c.id] : null) || null;
+    const stageOf = c => { const lc = local(c); const s = lc && lc.stage ? lc.stage : (c.stageTxt || c.taStage || ''); return s || 'Initial interview'; };
+    const decisionOf = c => { const lc = local(c); return (lc ? lc.decision : c.taDecision) || null; };
+    const reasonOf = c => { const lc = local(c); return (lc ? lc.reason : c.taReason) || ''; };
+    const informedOf = c => { const lc = local(c); return lc ? !!lc.informedAt : !!c.taInformedAt; };
+    const startOf = c => { const lc = local(c); return (lc && lc.startDate) || c.startDate || null; };
     const daysSince = iso => { if (!iso) return ''; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 864e5); return isNaN(d) ? '' : d <= 0 ? 'today' : d + 'd'; };
-    const jobCands = D.candidates.filter(c => selJob && jobOf(c) === selJob.id);
-    const card = c => { const stg = stageOf(c); return {id:c.id, name: dispName(c), sub: [c.loc && c.loc !== '\u2014' ? c.loc : '', (c.assessmentDone || (c.done && c.done.s3)) ? 'assessment done' : (c.opened ? 'in assessment' : (c.inviteSent ? 'link sent' : ''))].filter(Boolean).join(' \u00b7 '), grade: c.callGrade || '', gradeColor: GRADE_COLOR(c.callGrade), band: c.report ? c.report.band : '', days: daysSince(c.stageChangedAt || c.createdAt), auto: LIVE_ENABLED ? !!c.stageAuto : !st.taLocal[c.id], stage: stg, stageOpts: stageNames.map(s => ({id:s, label:s})), move: e => this.moveStage(c.id, e.target.value), openProfile: () => this.setState({profileId:c.id, aview:'profile', dec:{rec:null, note:''}, notesDraft:null, trOpen:false, rpItemsOpen:false}), withdrawn: !!c.withdrawn}; };
-    v.boardCols = stageNames.map(s => { const cards = jobCands.filter(c => stageOf(c) === s).map(card); return {name:s, n:cards.length, cards, dim: /not moving|declined|rejected/i.test(s)}; });
-    const strays = jobCands.filter(c => !stageNames.includes(stageOf(c))).map(card);
-    v.boardStrays = strays; v.hasStrays = strays.length > 0; v.boardTotal = jobCands.length;
+    const mkCard = (c, k) => {
+      const d = decisionOf(c), pending = !!d, isNo = d === 'no', isSkip = d === 'skip', atOffer = k === S_OFFER, atAD = k === S_AD;
+      let decisionText, informLabel;
+      if (isNo) { decisionText = atOffer ? 'Declined the offer' : 'Decision: not moving forward'; informLabel = atOffer ? 'I closed it out with them' : 'I let them know they didn\u2019t get it'; }
+      else if (atOffer) { decisionText = 'Accepted the offer'; informLabel = 'I confirmed their start date'; }
+      else if (isSkip) { decisionText = 'Decision: skip mock pitch, go to VP interview'; informLabel = 'I set up their VP interview'; }
+      else if (atAD) { decisionText = 'Decision: send offer letter'; informLabel = 'I sent the offer letter'; }
+      else { decisionText = 'Decision: moving to ' + shortStage(k + 1); informLabel = 'I told them they\u2019re moving forward'; }
+      const sd = startOf(c);
+      const doneText = k === S_HIRED ? 'Accepted \u00b7 start date ' + (sd ? fmtDate(sd) : 'confirmed') : (reasonOf(c) === 'declined' ? 'Declined the offer' : 'Told they didn\u2019t get it');
+      return { id:c.id, name:dispName(c), sub:[c.loc && c.loc !== '\u2014' ? c.loc : '', c.assessmentDone ? 'assessment done' : (c.opened ? 'in assessment' : (c.inviteSent ? 'link sent' : ''))].filter(Boolean).join(' \u00b7 '), grade:c.callGrade || '', gradeColor:GRADE_COLOR(c.callGrade), band:c.report ? c.report.band : '', days:daysSince(c.stageChangedAt || c.createdAt),
+        needsDecision: !pending && k < S_HIRED, canSkip: k === S_SECOND, pending, done: k >= S_HIRED, isNo,
+        fwdLabel: atAD ? 'Send offer letter \u2192' : atOffer ? 'Accepted' : 'Move forward \u2192 ' + shortStage(k + 1), noLabel: atOffer ? 'Declined' : 'Not moving forward',
+        decisionText, informLabel, doneText, tagColor: isNo ? AMB : GL,
+        showStart: pending && atOffer && !isNo, startDate: (st.startDraft || {})[c.id] || '', setStart: e => this.setState({startDraft:{...(this.state.startDraft || {}), [c.id]:e.target.value}}),
+        fwd: () => this.decide(c.id, 'fwd'), skip: () => this.decide(c.id, 'skip'), no: () => this.decide(c.id, 'no'), undo: () => this.decide(c.id, null), inform: () => this.inform(c, k, selJob),
+        openProfile: () => this.setState({profileId:c.id, aview:'profile', dec:{rec:null, note:''}, notesDraft:null, trOpen:false, rpItemsOpen:false}),
+        cardBg: pending ? 'var(--c-rgba-245-184-74-09)' : k === S_NMF ? 'var(--c-rgba-160-190-170-04)' : k === S_HIRED ? 'var(--c-rgba-16-185-129-08)' : 'var(--c-hex-0b120e)',
+        cardBorder: pending ? '1.5px solid var(--c-rgba-245-184-74-6)' : k === S_HIRED ? '1px solid var(--c-rgba-16-185-129-35)' : '1px solid var(--c-rgba-160-190-170-12)',
+        nameColor: k === S_NMF ? 'var(--c-hex-8fa396)' : 'var(--c-hex-e9f0ea)', canAct: isMgr };
+    };
+    v.boardCols = TA_STAGES.map((s, k) => { const cards = jobCands.filter(c => stageOf(c) === s.name).map(c => mkCard(c, k)); return { name: s.name, sub: s.sub || '', count: String(cards.length), cards, isEmpty: cards.length === 0, empty: k === S_NMF ? 'Candidates land here once you\u2019ve let them know' : k === S_HIRED ? 'Your hire lands here' : 'No candidates in this stage', dim: k === S_NMF, hired: k === S_HIRED, colBg: k === S_NMF ? 'transparent' : 'var(--c-hex-0f1611)', headColor: k === S_NMF ? 'var(--c-hex-8fa396)' : 'var(--c-hex-e9f0ea)' }; });
+    const toNotify = jobCands.filter(c => decisionOf(c)).length, informedEver = jobCands.filter(informedOf).length;
+    const inRunning = jobCands.filter(c => { const i = stageIndex(stageOf(c)); return i >= 0 && i < S_HIRED; }).length;
+    v.hasToNotify = toNotify > 0; v.toNotifyText = toNotify === 1 ? '1 person still needs to hear from you' : toNotify + ' people still need to hear from you';
+    v.allNotified = toNotify === 0 && informedEver > 0;
+    v.pipelineSummary = selJob ? ((selJob.status === 'Filled' ? 'Job filled \u00b7 ' : '') + inRunning + ' in the running' + (jobCands.length !== inRunning ? ' \u00b7 ' + jobCands.length + ' total' : '')) : '';
+    // stranded: a stage that no longer exists (e.g. the old "Assessment")
+    const strandedList = jobCands.filter(c => !stageNames.includes(stageOf(c)));
+    const strandedStages = [...new Set(strandedList.map(stageOf))];
+    v.stranded = strandedList.length > 0; v.strandedCount = strandedList.length;
+    v.strandedText = strandedList.length + (strandedList.length === 1 ? ' candidate is' : ' candidates are') + ' stuck in \u201c' + strandedStages.join('\u201d, \u201c') + '\u201d, ' + (strandedStages.length === 1 ? 'a stage that was removed.' : 'stages that were removed.');
+    v.strandedNames = strandedList.map(dispName); v.strandedOpen = !!st.strandedOpen; v.toggleStranded = () => this.setState({strandedOpen:!this.state.strandedOpen}); v.strandedNamesLabel = st.strandedOpen ? 'Hide names' : 'Show names';
+    v.moveTo = stageNames.includes(st.moveTo) ? st.moveTo : 'Initial interview'; v.setMoveTo = e => this.setState({moveTo:e.target.value}); v.moveToOpts = TA_STAGES.slice(0, S_OFFER).map(s => ({id:s.name, label:s.name}));
+    v.moveAllStranded = () => this.moveStranded(strandedList.map(c => c.id), v.moveTo);
     v.boardUnassigned = LIVE_ENABLED ? D.candidates.filter(c => !c.jobId).map(c => ({id:c.id, name:dispName(c), sub:c.role + (c.program ? ' \u00b7 ' + c.program : ''), jobOpts:[{id:'', label:'Assign to a job\u2026'}, ...jobs.map(j => ({id:j.id, label:j.label}))], assign: e => { if (e.target.value) this.assignJob(c.id, e.target.value); }})) : [];
     v.hasUnassigned = v.boardUnassigned.length > 0;
+    // new job
     const nb = st.board;
-    v.boardNewOpen = !!nb.open; v.toggleNewJob = () => this.setState({board:{...this.state.board, open:!this.state.board.open, msg:''}});
+    v.boardNewOpen = !!nb.open; v.toggleNewJob = () => this.setState({board:{...this.state.board, open:!this.state.board.open, msg:''}, jp:{...this.state.jp, open:false}});
     v.nbRole = nb.newRole; v.setNbRole = e => this.setState({board:{...this.state.board, newRole:e.target.value}});
     v.nbProgramOpts = [{id:'', label:'School / property\u2026'}, ...schoolsList.map(s => ({id:s, label:s})), {id:'__custom', label:'Other \u2014 type it in'}];
-    v.nbProgram = nb.newProgram; v.setNbProgram = e => this.setState({board:{...this.state.board, newProgram:e.target.value}});
+    v.nbProgram = nb.newProgram; v.setNbProgram = e => this.setState({board:{...this.state.board, newProgram:e.target.value, newCustom:''}});
     v.nbCustomOn = nb.newProgram === '__custom'; v.nbCustom = nb.newCustom; v.setNbCustom = e => this.setState({board:{...this.state.board, newCustom:e.target.value}});
+    // typed school names are checked against the saved properties (including alternate names) before a new one can be added
+    const knownPrograms = [...new Set(jobsAll.map(j => j.program).filter(Boolean))];
+    const schoolCheck = (txt, apply) => { const t = String(txt || '').trim(); if (t.length < 2) return {show:false}; const m = matchSchool(t, [...schoolsRaw, ...knownPrograms.filter(x => !schoolNames(schoolsRaw).includes(x))]); if (m && m.exact) return {show:true, txt:'That\u2019s \u201c' + m.exact + '\u201d, which is already saved.', useLabel:'Use ' + m.exact, use: () => apply(m.exact), addLabel:'', add:null}; if (m && m.suggest) return {show:true, txt:'Did you mean \u201c' + m.suggest + '\u201d?', useLabel:'Yes, use ' + m.suggest, use: () => apply(m.suggest), addLabel:'No \u2014 add \u201c' + t + '\u201d as a new property', add: () => apply(this.addSchool(t))}; return {show:true, txt:'Not a saved property yet.', useLabel:'', use:null, addLabel:'Add \u201c' + t + '\u201d as a new property', add: () => apply(this.addSchool(t))}; };
+    v.nbCheck = v.nbCustomOn ? schoolCheck(nb.newCustom, name => this.setState({board:{...this.state.board, newProgram:name, newCustom:''}})) : {show:false};
     v.nbRoles = D.roleOptions || Object.keys(D.profileByRole || {});
-    const nbOk = !!nb.newRole && (nb.newProgram === '__custom' ? nb.newCustom.trim().length > 1 : !!nb.newProgram) && st.busy !== 'job';
-    v.nbBlocked = !nbOk; v.nbBtnBg = nbOk ? G : '#20302680'; v.createJob = () => this.createJob();
+    const nbOk = !!nb.newRole && !!nb.newProgram && nb.newProgram !== '__custom' && st.busy !== 'job';
+    v.nbBlocked = !nbOk; v.nbBtnBg = nbOk ? G : 'var(--c-hex-20302680)'; v.createJob = () => this.createJob();
+    v.schoolCheckFor = schoolCheck;
     // users
     const allUsers = [...users, ...st.invited];
     v.userRows = allUsers.map(u => { const off = !!st.deactivated[u.id]; return {name:u.name, email:u.email, title:u.title, roleTags:u.roles.map(roleLabel), status: off ? 'Deactivated' : (u.status || 'Active'), statusColor: off ? RED : u.status === 'Invited' ? AMB : GL, action: off ? 'Reactivate' : 'Deactivate', toggle: () => this.setState({deactivated:{...this.state.deactivated, [u.id]:!off}})}; });
     v.invName = st.inv.name; v.invEmail = st.inv.email;
     v.setInvName = e => this.setState({inv:{...this.state.inv, name:e.target.value, saved:''}});
     v.setInvEmail = e => this.setState({inv:{...this.state.inv, email:e.target.value, saved:''}});
-    v.invRoleOpts = Object.keys(roleDefs).map(r => ({label:roleDefs[r].label, d:roleDefs[r].d, on: !!st.inv.roles[r], border: st.inv.roles[r] ? 'rgba(16,185,129,.4)' : 'rgba(160,190,170,.12)', toggle: () => this.setState({inv:{...this.state.inv, roles:{...this.state.inv.roles, [r]:!this.state.inv.roles[r]}, saved:''}})}));
+    v.invRoleOpts = Object.keys(roleDefs).map(r => ({label:roleDefs[r].label, d:roleDefs[r].d, on: !!st.inv.roles[r], border: st.inv.roles[r] ? 'var(--c-rgba-16-185-129-4)' : 'var(--c-rgba-160-190-170-12)', toggle: () => this.setState({inv:{...this.state.inv, roles:{...this.state.inv.roles, [r]:!this.state.inv.roles[r]}, saved:''}})}));
     const invRoles = Object.keys(st.inv.roles).filter(r => st.inv.roles[r]);
     const invOk = st.inv.name.trim() && /@/.test(st.inv.email) && invRoles.length;
-    v.invBlocked = !invOk; v.invBtnBg = invOk ? G : '#20302680';
+    v.invBlocked = !invOk; v.invBtnBg = invOk ? G : 'var(--c-hex-20302680)';
     v.sendInvite = () => { const f = this.state.inv; const rs = Object.keys(f.roles).filter(r => f.roles[r]); if (!f.name.trim() || !/@/.test(f.email) || !rs.length) return; const nm = f.name.trim(), parts = nm.split(' '); this.setState({invited:[...this.state.invited, {id:'u' + Date.now(), name:nm, short: parts[0][0] + '. ' + parts.slice(1).join(' '), title:'Invited · pending', email:f.email.trim(), roles:rs, status:'Invited'}], inv:{name:'', email:'', roles:{}, saved:'Invite sent — expires in 7 days.'}}); };
     v.invSaved = st.inv.saved;
     // accommodation inbox
     const accomCopy = {time:'+50% time on all timed sections. Timers adjust automatically; evaluators see only “accommodation in place” — never the reason.', format:'Alternative format arranged: screen-reader-verified inventory and scenarios, captions on the live session. Reason not shared with evaluators.', info:'Asked the candidate what would help. Reply due within one business day; the candidate’s deadline is paused meanwhile.'};
     const setAccom = (id, status, resolution) => () => this.setState({accomState:{...this.state.accomState, [id]:{status, resolution}}});
-    v.inboxRows = seededAccoms.map(a => { const ov = st.accomState[a.id]; const status = ov ? ov.status : a.status; const resolution = ov ? ov.resolution : (a.resolution || ''); const open = status === 'Open'; const col = open ? AMB : status === 'Needs info' ? '#5B9BFF' : G; return {cand:a.cand, t:a.t, txt:a.txt, status, resolution, open, closed:!open, bg:col, border: open ? 'rgba(245,184,74,.35)' : 'rgba(160,190,170,.13)', approveTime:setAccom(a.id, 'Approved', accomCopy.time), approveFormat:setAccom(a.id, 'Approved', accomCopy.format), needInfo:setAccom(a.id, 'Needs info', accomCopy.info)}; });
+    v.inboxRows = seededAccoms.map(a => { const ov = st.accomState[a.id]; const status = ov ? ov.status : a.status; const resolution = ov ? ov.resolution : (a.resolution || ''); const open = status === 'Open'; const col = open ? AMB : status === 'Needs info' ? 'var(--c-hex-5b9bff)' : G; return {cand:a.cand, t:a.t, txt:a.txt, status, resolution, open, closed:!open, bg:col, border: open ? 'var(--c-rgba-245-184-74-35)' : 'var(--c-rgba-160-190-170-13)', approveTime:setAccom(a.id, 'Approved', accomCopy.time), approveFormat:setAccom(a.id, 'Approved', accomCopy.format), needInfo:setAccom(a.id, 'Needs info', accomCopy.info)}; });
     // ===== live overrides: real accounts, real candidates, server-side writes =====
     if (LIVE_ENABLED) {
       const L = this.live, me = user || {};
@@ -1273,18 +1412,30 @@ export class PeakCombine extends React.Component<any, any> {
       v.ncFileName = nc.file ? nc.file.name : '';
       const setNC = k => e => this.setState({newCand:{...this.state.newCand, [k]:e.target.value, saved:''}});
       v.setNcName = setNC('name'); v.setNcEmail = setNC('email'); v.setNcPhone = setNC('phone'); v.setNcRole = setNC('role'); v.setNcProgram = setNC('program'); v.setNcLoc = setNC('loc'); v.setNcSchool = setNC('school'); v.setNcLinkedin = setNC('linkedin');
-      v.ncProgramOpts = [{id:'', label:'Hiring for \u2014 school / property\u2026'}, ...schoolsList.map(s => ({id:s, label:s})), {id:'__custom', label:'Other \u2014 type it in'}]; v.ncProgramPick = nc.programPick || ''; v.setNcProgramPick = setNC('programPick'); v.ncCustomOn = nc.programPick === '__custom';
+      v.ncProgramOpts = [{id:'', label:'Hiring for \u2014 school / property\u2026'}, ...schoolsList.map(s => ({id:s, label:s})), {id:'__custom', label:'Other \u2014 type it in'}]; v.ncProgramPick = nc.programPick || ''; v.setNcProgramPick = e => this.setState({newCand:{...this.state.newCand, programPick:e.target.value, program:'', saved:''}}); v.ncCustomOn = nc.programPick === '__custom';
+      v.ncCheck = v.ncCustomOn ? v.schoolCheckFor(nc.program, name => this.setState({newCand:{...this.state.newCand, programPick:name, program:'', saved:''}})) : {show:false};
+      // location: places used before first, then the built-in city list, then live results when a places token is configured
+      const locQ = (nc.loc || '').trim().toLowerCase();
+      const used = (LIVE_ENABLED && this.live.view ? (this.live.view.usedLocations || []) : D.candidates.map(c => c.loc).filter(x => x && x !== '\u2014'));
+      const usedHits = locQ.length >= 1 ? used.filter(x => x.toLowerCase().includes(locQ)).slice(0, 4) : [];
+      const cityHits = cityMatches(locQ, 6).filter(x => !usedHits.includes(x));
+      const remote = (st.locRemote || []).filter(x => !usedHits.includes(x) && !cityHits.includes(x));
+      v.ncLocSuggestions = (st.locFocus && locQ.length >= 2) ? [...usedHits.map(x => ({v:x, tag:'used before'})), ...cityHits.map(x => ({v:x, tag:''})), ...remote.map(x => ({v:x, tag:'places'}))].slice(0, 8).map(o => ({...o, pick: () => this.setState({newCand:{...this.state.newCand, loc:o.v}, locFocus:false, locRemote:[]})})) : [];
+      v.ncLocHas = v.ncLocSuggestions.length > 0;
+      v.setNcLoc = e => { const val = e.target.value; this.setState({newCand:{...this.state.newCand, loc:val, saved:''}, locFocus:true}); this.searchPlaces(val); };
+      v.ncLocFocus = () => this.setState({locFocus:true}); v.ncLocBlur = () => setTimeout(() => this.setState({locFocus:false}), 150);
+      v.ncLocHint = ENVX.VITE_MAPBOX_TOKEN ? 'Searching cities as you type \u00b7 places used before first' : 'Places used before first, then a built-in US city list. Add VITE_MAPBOX_TOKEN for live place search.';
       v.ncRoles = D.roleOptions || Object.keys(D.profileByRole || {});
-      v.ncTracks = [{id:'assessment', label:'Full assessment link', d:'Job preview · details & résumé · Sales Decisions · 20–30 min'}, {id:'info', label:'Details-only link', d:'Contact details & résumé · 2 min · no questions'}].map(t => { const on = (nc.track || 'assessment') === t.id; return {...t, on: () => this.setState({newCand:{...this.state.newCand, track:t.id, saved:''}}), bg: on ? 'rgba(16,185,129,.12)' : 'transparent', fg: on ? GL : '#A7B5AB', border: on ? 'rgba(16,185,129,.45)' : 'rgba(160,190,170,.18)'}; });
+      v.ncTracks = [{id:'assessment', label:'Full assessment link', d:'Job preview · details & résumé · Sales Decisions · 20–30 min'}, {id:'info', label:'Details-only link', d:'Contact details & résumé · 2 min · no questions'}].map(t => { const on = (nc.track || 'assessment') === t.id; return {...t, on: () => this.setState({newCand:{...this.state.newCand, track:t.id, saved:''}}), bg: on ? 'var(--c-rgba-16-185-129-12)' : 'transparent', fg: on ? GL : 'var(--c-hex-a7b5ab)', border: on ? 'var(--c-rgba-16-185-129-45)' : 'var(--c-rgba-160-190-170-18)'}; });
       v.pickNcFile = e => { const f = e.target.files && e.target.files[0]; this.setState({newCand:{...this.state.newCand, file: f || null, saved:''}}); try { e.target.value = ''; } catch (x) {} };
       v.clearNcFile = () => this.setState({newCand:{...this.state.newCand, file:null}});
-      const ncOk = nc.name.trim().length > 1 && /@/.test(nc.email) && st.busy !== 'invite';
-      v.ncBlocked = !ncOk; v.ncBtnBg = ncOk ? G : '#20302680'; v.ncBusy = st.busy === 'invite';
+      const ncOk = nc.name.trim().length > 1 && /@/.test(nc.email) && st.busy !== 'invite' && nc.programPick !== '__custom';
+      v.ncBlocked = !ncOk; v.ncBtnBg = ncOk ? G : 'var(--c-hex-20302680)'; v.ncBusy = st.busy === 'invite';
       v.ncEmailInvite = () => this.createCandidate('email'); v.ncCopyInvite = () => this.createCandidate('copy'); v.ncManual = () => this.createCandidate('manual');
       v.ncLinkLabel = (nc.track || 'assessment') === 'info' ? 'details link' : 'assessment link';
       v.ncSaved = nc.saved || ''; v.ncSavedColor = /^Could not/.test(nc.saved || '') ? RED : GL;
       v.pipeEmpty = v.isStaff && D.candidates.length === 0;
-      v.pipeRows = v.pipeRows.map((row, i) => { const c = D.candidates[i]; if (!c) return row; const info = c.track === 'info'; return {...row, stageLabel: c.stageLabel, dSub: st.blind ? row.dSub : ((c.loc && c.loc !== '\u2014' ? c.loc + ' \u00b7 ' : '') + c.email), canReview:false, showInvite: isMgr && !c.withdrawn && !c.done.s3 && !(info && c.infoDone), showUpgrade: isMgr && !c.withdrawn && (info || c.source === 'manual') && !c.done.s3, upgradeTxt: info ? 'Send assessment link' : 'Email assessment link', resendTxt: (c.inviteSent ? 'Resend ' : 'Email ') + (info ? 'details link' : 'link'), resend: () => this.sendInviteTo(c), copy: () => this.copyLinkFor(c), upgrade: () => this.sendInviteTo(c, 'assessment'), flash: st.flash[c.id] || '', inviteState: c.inviteState + (c.resendRequested ? ' \u00b7 new link requested' : ''), inviteColor: (c.resendRequested || c.expired) ? AMB : c.opened ? GL : '#8FA396', tag: c.source === 'self' ? 'Applied via ' + (c.sourceLabel || 'job link') + (c.campaign ? ' \u00b7 ' + c.campaign : '') : c.source === 'manual' ? 'Added manually' : info ? 'Details-only link' : '', hasResume: !!c.resumePath, grade: c.callGrade || '', gradeColor: GRADE_COLOR(c.callGrade), boardStage: c.stageTxt || ''}; });
+      v.pipeRows = v.pipeRows.map((row, i) => { const c = D.candidates[i]; if (!c) return row; const info = c.track === 'info'; return {...row, stageLabel: c.stageLabel, dSub: st.blind ? row.dSub : ((c.loc && c.loc !== '\u2014' ? c.loc + ' \u00b7 ' : '') + c.email), canReview:false, showInvite: isMgr && !c.withdrawn && !c.done.s3 && !(info && c.infoDone), showUpgrade: isMgr && !c.withdrawn && (info || c.source === 'manual') && !c.done.s3, upgradeTxt: info ? 'Send assessment link' : 'Email assessment link', resendTxt: (c.inviteSent ? 'Resend ' : 'Email ') + (info ? 'details link' : 'link'), resend: () => this.sendInviteTo(c), copy: () => this.copyLinkFor(c), upgrade: () => this.sendInviteTo(c, 'assessment'), flash: st.flash[c.id] || '', inviteState: c.inviteState + (c.resendRequested ? ' \u00b7 new link requested' : ''), inviteColor: (c.resendRequested || c.expired) ? AMB : c.opened ? GL : 'var(--c-hex-8fa396)', tag: c.source === 'self' ? 'Applied via ' + (c.sourceLabel || 'job link') + (c.campaign ? ' \u00b7 ' + c.campaign : '') : c.source === 'manual' ? 'Added manually' : info ? 'Details-only link' : '', hasResume: !!c.resumePath, grade: c.callGrade || '', gradeColor: GRADE_COLOR(c.callGrade), boardStage: c.stageTxt || ''}; });
       // profile
       v.pNeedsScore = !!(p && p.done && p.done.s3 && !p.report && isMgr);
       v.rpNeedsEvidence = !!(p && p.report && !(p.report.items && p.report.items.length) && isMgr);
@@ -1317,15 +1468,15 @@ export class PeakCombine extends React.Component<any, any> {
         v.liveCaseFile = lc.caseFile ? lc.caseFile.name : ''; v.openLiveCaseFile = () => { if (lc.caseFile) this.openFile(lc.id, lc.caseFile.path); };
         v.liveResume = lc.resumeName || ''; v.openLiveResume = () => { if (lc.resumePath) this.openFile(lc.id, lc.resumePath); };
         v.liveFlags = [
-          {label: lcAccom ? 'Accommodation in place \u00b7 +50% prep time' : 'No accommodations', fg: lcAccom ? '#E9D9B0' : '#7E9186', bg: lcAccom ? 'rgba(245,184,74,.1)' : 'transparent', border: lcAccom ? 'rgba(245,184,74,.35)' : 'rgba(160,190,170,.14)'},
-          {label: lp.consentRec ? 'Recording consent \u2713' : 'Recording consent not given', fg: lp.consentRec ? GL : AMB, bg: lp.consentRec ? 'rgba(16,185,129,.1)' : 'rgba(245,184,74,.1)', border: lp.consentRec ? 'rgba(16,185,129,.3)' : 'rgba(245,184,74,.35)'},
-          {label: ld.s5b ? 'Case submitted \u00b7 read it' : 'Case not submitted', fg: ld.s5b ? GL : AMB, bg: ld.s5b ? 'rgba(16,185,129,.1)' : 'rgba(245,184,74,.1)', border: ld.s5b ? 'rgba(16,185,129,.3)' : 'rgba(245,184,74,.35)'},
-          {label: st.coi ? 'COI declared \u2713' : 'COI declaration pending', fg: st.coi ? GL : AMB, bg: st.coi ? 'rgba(16,185,129,.1)' : 'rgba(245,184,74,.1)', border: st.coi ? 'rgba(16,185,129,.3)' : 'rgba(245,184,74,.35)'}
+          {label: lcAccom ? 'Accommodation in place \u00b7 +50% prep time' : 'No accommodations', fg: lcAccom ? 'var(--c-hex-e9d9b0)' : 'var(--c-hex-7e9186)', bg: lcAccom ? 'var(--c-rgba-245-184-74-1)' : 'transparent', border: lcAccom ? 'var(--c-rgba-245-184-74-35)' : 'var(--c-rgba-160-190-170-14)'},
+          {label: lp.consentRec ? 'Recording consent \u2713' : 'Recording consent not given', fg: lp.consentRec ? GL : AMB, bg: lp.consentRec ? 'var(--c-rgba-16-185-129-1)' : 'var(--c-rgba-245-184-74-1)', border: lp.consentRec ? 'var(--c-rgba-16-185-129-3)' : 'var(--c-rgba-245-184-74-35)'},
+          {label: ld.s5b ? 'Case submitted \u00b7 read it' : 'Case not submitted', fg: ld.s5b ? GL : AMB, bg: ld.s5b ? 'var(--c-rgba-16-185-129-1)' : 'var(--c-rgba-245-184-74-1)', border: ld.s5b ? 'var(--c-rgba-16-185-129-3)' : 'var(--c-rgba-245-184-74-35)'},
+          {label: st.coi ? 'COI declared \u2713' : 'COI declaration pending', fg: st.coi ? GL : AMB, bg: st.coi ? 'var(--c-rgba-16-185-129-1)' : 'var(--c-rgba-245-184-74-1)', border: st.coi ? 'var(--c-rgba-16-185-129-3)' : 'var(--c-rgba-245-184-74-35)'}
         ];
         const oth = (L.raw.evaluations || []).find(e => e.candidate_id === st.liveCand && e.evaluator_id !== me.id) || null;
         v.otherShort = otherName;
         v.agreeIntro = oth ? ('Your scores vs. ' + otherName + ' (submitted ' + fmtT(oth.submitted_at) + '). Differences over 1.5 are flagged for a calibration discussion.') : ('Your scores are locked. ' + otherName + ' has not submitted yet \u2014 the comparison appears here once they do.');
-        v.agreeRows = ['sj','hd','re','sa','co'].map(id => { const mine2 = st.r2[id] ?? st.r1[id]; const o = oth ? ((oth.r2 || {})[id] ?? (oth.r1 || {})[id]) : null; const diff = (mine2 != null && o != null) ? Math.abs(mine2 - o) : null; const flag = diff != null && diff > 1.5; return {name:compName(id), mine: mine2 != null ? Number(mine2).toFixed(1) : '\u2014', other: o != null ? Number(o).toFixed(1) : '\u2014', flagTxt: mine2 == null ? 'not scored' : o == null ? 'awaiting other evaluator' : flag ? '\u26a0 \u0394 ' + diff.toFixed(1) + ' \u2014 flagged' : '\u0394 ' + diff.toFixed(1) + ' \u00b7 aligned', flagColor: flag ? AMB : o == null ? DIM : GL, bg: flag ? 'rgba(245,184,74,.06)' : '#0B120E', border: flag ? 'rgba(245,184,74,.4)' : 'rgba(160,190,170,.1)'}; });
+        v.agreeRows = ['sj','hd','re','sa','co'].map(id => { const mine2 = st.r2[id] ?? st.r1[id]; const o = oth ? ((oth.r2 || {})[id] ?? (oth.r1 || {})[id]) : null; const diff = (mine2 != null && o != null) ? Math.abs(mine2 - o) : null; const flag = diff != null && diff > 1.5; return {name:compName(id), mine: mine2 != null ? Number(mine2).toFixed(1) : '\u2014', other: o != null ? Number(o).toFixed(1) : '\u2014', flagTxt: mine2 == null ? 'not scored' : o == null ? 'awaiting other evaluator' : flag ? '\u26a0 \u0394 ' + diff.toFixed(1) + ' \u2014 flagged' : '\u0394 ' + diff.toFixed(1) + ' \u00b7 aligned', flagColor: flag ? AMB : o == null ? DIM : GL, bg: flag ? 'var(--c-rgba-245-184-74-06)' : 'var(--c-hex-0b120e)', border: flag ? 'var(--c-rgba-245-184-74-4)' : 'var(--c-rgba-160-190-170-1)'}; });
         v.ivTitle = 'Structured interview \u2014 ' + (lc.name || '');
         v.ivMeta = ls ? (ls.when + ' \u00b7 after the combine \u00b7 40 min \u00b7 with ' + otherName) : '';
         v.ivLockNote = 'Scores lock on submit and stay hidden from ' + otherName + ' until they submit theirs. ';
@@ -1358,7 +1509,7 @@ export class PeakCombine extends React.Component<any, any> {
         const arSave = async outcome => { if (!arAll || this.state.arDone[arC.id] || !arC.id) return; const r = await this.write(() => L.insertReview({candidate_id:arC.id, ratings:this.state.arRatings, level:arLv, outcome}), 'err'); if (r.ok) this.setState({arSaved: outcome === 'advanced' ? 'Advanced \u2014 the candidate can continue to Sales Decisions.' : 'Recorded \u2014 not advanced at the application stage.'}); };
         v.arAdvance = () => arSave('advanced'); v.arHold = () => arSave('held');
         v.saveOutcome = async () => { const o = this.state.oc, vv = o.vals; if (!o.hire) return; const num = x => (x === undefined || x === '') ? null : (isNaN(Number(x)) ? x : Number(x)); const m = Number(vv.mgr); const row = {dials:num(vv.dials), mtgs:num(vv.mtgs), pipe:vv.pipe || null, rev:vv.rev || null, crm:num(vv.crm), mgr:num(vv.mgr), coach: vv.mgr ? (m >= 4 ? 'Strong' : m >= 3 ? 'Moderate' : 'Weak') : null, ret:'Active'}; const r = await this.write(() => L.upsertOutcome(o.hire, o.period, row), 'err'); if (r.ok) this.setState({oc:{...this.state.oc, vals:{}, saved:'Saved \u2014 ' + o.hire + ' \u00b7 ' + o.period.replace('d','') + ' days.'}, vPeriod:o.period}); };
-        v.inboxRows = seededAccoms.map(a => { const status = a.status, resolution = a.resolution || ''; const open = status === 'Open'; const col = open ? AMB : status === 'Needs info' ? '#5B9BFF' : G; const set = (s2, res) => () => this.write(() => L.updateAccommodation(a.id, s2, res), 'err'); return {cand:a.cand, t:a.t, txt:a.txt, status, resolution, open, closed:!open, bg:col, border: open ? 'rgba(245,184,74,.35)' : 'rgba(160,190,170,.13)', approveTime:set('Approved', accomCopy.time), approveFormat:set('Approved', accomCopy.format), needInfo:set('Needs info', accomCopy.info)}; });
+        v.inboxRows = seededAccoms.map(a => { const status = a.status, resolution = a.resolution || ''; const open = status === 'Open'; const col = open ? AMB : status === 'Needs info' ? 'var(--c-hex-5b9bff)' : G; const set = (s2, res) => () => this.write(() => L.updateAccommodation(a.id, s2, res), 'err'); return {cand:a.cand, t:a.t, txt:a.txt, status, resolution, open, closed:!open, bg:col, border: open ? 'var(--c-rgba-245-184-74-35)' : 'var(--c-rgba-160-190-170-13)', approveTime:set('Approved', accomCopy.time), approveFormat:set('Approved', accomCopy.format), needInfo:set('Needs info', accomCopy.info)}; });
         v.inboxEmpty = seededAccoms.length === 0;
         const byEval = {};
         (L.raw.evaluations || []).forEach(e => { const vals = [...Object.values(e.r1 || {}), ...Object.values(e.r2 || {})].filter(x => typeof x === 'number'); if (!vals.length) return; const b = byEval[e.evaluator_id] = byEval[e.evaluator_id] || {sum:0, n:0}; vals.forEach(x => { b.sum += x; b.n += 1; }); });
@@ -1389,7 +1540,7 @@ export class PeakCombine extends React.Component<any, any> {
       v.pubFields = [{label:'Full name', ph:'First and last name', val:f.name, set:setF('name')}, {label:'Email', ph:'you@example.com', val:f.email, set:setF('email')}, {label:'Phone', ph:'(555) 000-0000', val:f.phone, set:setF('phone')}, {label:'Location', ph:'City, State \u00b7 open to relocation?', val:f.loc, set:setF('loc')}, {label:'LinkedIn (optional)', ph:'linkedin.com/in/\u2026', val:f.linkedin, set:setF('linkedin')}];
       v.pubConsent = !!f.consent; v.togglePubConsent = () => this.setState({pub:{...this.state.pub, form:{...this.state.pub.form, consent:!this.state.pub.form.consent}, msg:''}});
       const pubOk = f.name.trim().length > 1 && /@/.test(f.email) && f.consent && !pb.busy;
-      v.pubBlocked = !pubOk; v.pubBtnBg = pubOk ? G : '#20302680'; v.pubSubmit = () => this.submitApply();
+      v.pubBlocked = !pubOk; v.pubBtnBg = pubOk ? G : 'var(--c-hex-20302680)'; v.pubSubmit = () => this.submitApply();
       const bStages = (Array.isArray(pd.stages) && pd.stages.length) ? pd.stages : DEFAULT_TA_STAGES;
       const bc = pd.candidates || [];
       const auto = c => c.withdrawn ? 'Not moving forward' : c.decision === 'Advance' ? 'Offer' : c.decision === 'Do Not Advance' ? 'Not moving forward' : (c.evaluated || c.combine) ? 'Combine' : c.assessment_done ? 'Assessment' : c.first_call ? 'First call' : 'Applied';
@@ -1405,6 +1556,7 @@ export class PeakCombine extends React.Component<any, any> {
   }
 
   componentDidUpdate(prevProps, prevState) {
+    if (prevState.theme !== this.state.theme) this.applyTheme();
     saveState(this.state);
     if (!LIVE_ENABLED || this.hydrating || !prevState) return;
     const st = this.state;

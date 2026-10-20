@@ -218,6 +218,20 @@ alter table public.candidates
   add column if not exists utm jsonb not null default '{}'::jsonb,
   add column if not exists applied_at timestamptz;
 
+-- ---------- v3.5 additions (safe on an existing database) ----------
+-- Hiring pipeline: a pending decision that waits until the candidate has been told, the hire's start date, and job merging.
+alter table public.candidates
+  add column if not exists ta_decision text,            -- 'fwd' | 'skip' | 'no' while the candidate has not been told yet
+  add column if not exists ta_decided_at timestamptz,
+  add column if not exists ta_informed_at timestamptz,  -- when staff ticked "I let them know"
+  add column if not exists ta_reason text,              -- 'declined' when an offer was turned down
+  add column if not exists start_date date;
+alter table public.jobs
+  add column if not exists merged_into uuid references public.jobs(id);
+-- The entry-level role is now called Account Executive (the assessment it takes is the Account Executive V1.2 bank).
+update public.candidates set role = 'Account Executive' where role = 'Entry Level Sales Professional';
+update public.jobs set title = 'Account Executive' where title = 'Entry Level Sales Professional';
+
 -- ---------- who is asking? ----------
 create or replace function public.current_staff_id() returns uuid
 language sql stable security definer set search_path = public as $$
@@ -537,14 +551,17 @@ begin
   if not found then
     return jsonb_build_object('status', 'invalid');
   end if;
-  select value into stages from public.settings where key = 'taStages';
+  if j.merged_into is not null then
+    select * into j from public.jobs where id = j.merged_into;
+  end if;
+  stages := '[]'::jsonb; -- stages are fixed in the app (Initial interview … Not moving forward)
   return jsonb_build_object(
     'status', 'ok',
     'job', jsonb_build_object('id', j.id, 'title', j.title, 'program', j.program, 'status', j.status),
     'stages', coalesce(stages, '[]'::jsonb),
     'candidates', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', c.id, 'name', c.name, 'loc', c.loc, 'stage', c.ta_stage, 'stage_changed_at', c.stage_changed_at, 'created_at', c.created_at,
+        'id', c.id, 'name', c.name, 'loc', c.loc, 'stage', c.ta_stage, 'stage_changed_at', c.stage_changed_at, 'created_at', c.created_at, 'pending', c.ta_decision is not null,
         'assessment_done', coalesce((c.progress -> 'done' ->> 's3')::boolean, false),
         'first_call', exists (select 1 from public.transcripts t where t.candidate_id = c.id and t.kind like 'First call%'),
         'combine', exists (select 1 from public.sessions s where s.candidate_id = c.id),
@@ -565,6 +582,9 @@ begin
   select * into j from public.jobs where apply_token = p_token;
   if not found then
     return jsonb_build_object('status', 'invalid');
+  end if;
+  if j.merged_into is not null then
+    select * into j from public.jobs where id = j.merged_into;
   end if;
   if not j.apply_enabled or j.status not in ('Open') then
     return jsonb_build_object('status', 'closed', 'job', jsonb_build_object('title', j.title, 'program', j.program));

@@ -2,7 +2,7 @@
 // Live data layer — Supabase (Postgres + Auth) behind the same view-model the screens already render.
 // When VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are missing, or the URL has ?demo=1, the app stays in demo mode.
 import { createClient } from '@supabase/supabase-js';
-import { sourceLabel } from './defaults';
+import { sourceLabel, LEGACY_STAGE_MAP } from './defaults';
 
 const ENV = (import.meta && import.meta.env) || {};
 const SB_URL = ENV.VITE_SUPABASE_URL, SB_KEY = ENV.VITE_SUPABASE_ANON_KEY;
@@ -156,13 +156,29 @@ export class LiveStore {
   updateJob(id, patch) { return this._run(sb.from('jobs').update(patch).eq('id', id)); }
   async findOrCreateJob(title, program) {
     const p = String(program || '').trim();
-    const hit = (this.raw.jobs || []).find(j => j.title === title && (j.program || '') === p);
+    const hit = (this.raw.jobs || []).find(j => !j.merged_into && j.title === title && (j.program || '') === p);
     if (hit) return hit;
     const row = await this.createJob({ title, program: p });
     this.raw.jobs = [...(this.raw.jobs || []), row]; this.view = null;
     return row;
   }
-  setStage(candidateId, stage) { return this._run(sb.from('candidates').update({ ta_stage: stage || '', stage_changed_at: new Date().toISOString() }).eq('id', candidateId)); }
+  setStage(candidateId, stage) { return this._run(sb.from('candidates').update({ ta_stage: stage || '', stage_changed_at: new Date().toISOString(), ta_decision: null }).eq('id', candidateId)); }
+  setStageBulk(ids, stage) { return this._run(sb.from('candidates').update({ ta_stage: stage || '', stage_changed_at: new Date().toISOString(), ta_decision: null }).in('id', ids)); }
+  // Decisions wait until the candidate has been told: setDecision parks it (card turns amber); applyDecision moves the card.
+  setDecision(candidateId, decision) { return this._run(sb.from('candidates').update({ ta_decision: decision || null, ta_decided_at: decision ? new Date().toISOString() : null }).eq('id', candidateId)); }
+  applyDecision(candidateId, { stage, reason, startDate }) {
+    const patch: any = { ta_stage: stage, stage_changed_at: new Date().toISOString(), ta_decision: null, ta_informed_at: new Date().toISOString(), ta_reason: reason || null };
+    if (startDate) patch.start_date = startDate;
+    return this._run(sb.from('candidates').update(patch).eq('id', candidateId));
+  }
+  // Merge duplicate jobs: candidates move to the job kept; the duplicates stay as 'Merged' so their links still resolve.
+  async mergeJobs(dupIds, intoId) {
+    for (const id of dupIds) {
+      if (id === intoId) continue;
+      await this._run(sb.from('candidates').update({ job_id: intoId }).eq('job_id', id));
+      await this._run(sb.from('jobs').update({ merged_into: intoId, status: 'Merged', posted: false, share_enabled: false }).eq('id', id));
+    }
+  }
   assignJob(candidateId, jobId, role, program) { const patch: any = { job_id: jobId || null }; if (role) patch.role = role; if (program != null) patch.program = program; return this._run(sb.from('candidates').update(patch).eq('id', candidateId)); }
   remindNow() { return this.api('/api/remind', {}); }
   reevaluateTranscript(transcriptId) { return this.api('/api/transcript', { action: 'reevaluate', transcriptId }); }
@@ -272,7 +288,8 @@ export class LiveStore {
       // pipeline board: the stage staff set, or one derived from where the candidate actually is
       const firstCall = T.filter(t => /^First call/i.test(t.kind || '')).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       const callGrade = (firstCall.find(t => t.grade) || {}).grade || '';
-      const autoStage = P.withdrawn ? 'Not moving forward' : dec ? (dec.decision === 'Advance' ? 'Offer' : dec.decision === 'Hold' ? 'Combine' : 'Not moving forward') : (E.length || ses) ? 'Combine' : done.s3 ? 'Assessment' : firstCall.length ? 'First call' : 'Applied';
+      const autoStage = (P.withdrawn || (dec && dec.decision === 'Do Not Advance')) ? 'Not moving forward' : 'Initial interview';
+      const taRaw = LEGACY_STAGE_MAP[c.ta_stage] || c.ta_stage || '';
       const reminders = (c.reminder1_at ? 1 : 0) + (c.reminder2_at ? 1 : 0);
       const stageLabelFull = stageLabel + (reminders && !done.s3 && !P.infoDone ? ' \u00b7 reminded \u00d7' + reminders : '');
       return {
@@ -285,7 +302,7 @@ export class LiveStore {
         token: c.token, link: origin() + '/?invite=' + c.token, inviteState, expired, inviteSent: !!c.invite_sent_at, opened: !!c.opened_at,
         resendRequested, done, progress: P, report: rp, scoredAt: c.scored_at, hasSession: !!ses, sessionId: ses ? ses.id : null, canSchedule,
         evalCount: E.length, evaluations: E, transcripts: T, withdrawn: !!P.withdrawn, expiresAt: c.invite_expires_at, createdAt: c.created_at,
-        jobId: c.job_id || null, taStage: c.ta_stage || '', autoStage, stageTxt: c.ta_stage || autoStage, stageAuto: !c.ta_stage, stageChangedAt: c.stage_changed_at || c.created_at, callGrade, reminders, hasFirstCall: firstCall.length > 0, assessmentDone: !!done.s3,
+        jobId: c.job_id || null, taStage: taRaw, autoStage, stageTxt: taRaw || autoStage, stageAuto: !taRaw, taDecision: c.ta_decision || null, taDecidedAt: c.ta_decided_at || null, taInformedAt: c.ta_informed_at || null, taReason: c.ta_reason || '', startDate: c.start_date || null, stageChangedAt: c.stage_changed_at || c.created_at, callGrade, reminders, hasFirstCall: firstCall.length > 0, assessmentDone: !!done.s3,
         utm: c.utm || {}, sourceLabel: sourceLabel(c), campaign: (c.utm || {}).utm_campaign || '', adContent: (c.utm || {}).utm_content || '', appliedAt: c.applied_at || null
       };
     });
@@ -294,7 +311,10 @@ export class LiveStore {
     const accoms = R.accommodations.map(a => { const c = candById[a.candidate_id] || {}; return { id: a.id, candId: a.candidate_id, cand: (c.name || '\u2014') + ' \u00b7 ' + (c.anon || ''), t: fmtT(a.created_at), txt: R.details[a.id] || '(request details are visible to hiring managers)', status: a.status, resolution: a.resolution || '' }; });
     const transcripts = (R.transcripts || []).map(t => ({ id: t.id, candId: t.candidate_id, kind: t.kind, title: t.title || '', txt: t.txt || '', source: t.source_name || '', by: short(t.uploaded_by), t: fmtT(t.created_at), review: t.review || null, status: t.review_status || 'none', notes: t.notes || '', grade: t.grade || '' }));
     const jobs = (R.jobs || []).map(j => ({ id: j.id, title: j.title, program: j.program || '', label: j.title + (j.program ? ' \u00b7 ' + j.program : ''), status: j.status || 'Open', shareEnabled: j.share_enabled !== false, applyEnabled: j.apply_enabled !== false, shareLink: origin() + '/?board=' + j.share_token, applyLink: origin() + '/?apply=' + j.apply_token, applyToken: j.apply_token, n: candidates.filter(c => c.jobId === j.id).length, createdAt: j.created_at,
-      description: j.description || '', location: j.location || '', comp: j.comp || '', employmentType: j.employment_type || 'Full-time', posted: !!j.posted, postedAt: j.posted_at || null }));
+      description: j.description || '', location: j.location || '', comp: j.comp || '', employmentType: j.employment_type || 'Full-time', posted: !!j.posted, postedAt: j.posted_at || null, mergedInto: j.merged_into || null, merged: !!j.merged_into }));
+    const locCount = {};
+    candidates.forEach(c => { const v = (c.loc || '').trim(); if (v && v !== '\u2014') locCount[v] = (locCount[v] || 0) + 1; });
+    const usedLocations = Object.entries(locCount).sort((a, b) => b[1] - a[1]).map(([v]) => v);
     const applications = Object.fromEntries(candidates.map(c => [c.id, (c.progress && c.progress.ev) || []]));
     const decisions = R.decisions.map(d => { const c = candById[d.candidate_id] || {}; return { id: d.id, candId: d.candidate_id, cand: c.name || '\u2014', role: c.role || '', decision: d.decision, by: d.by_label || short(d.decided_by), t: fmtT(d.created_at), rationale: d.rationale || '', agree: d.agree || '\u2014' }; });
     const n = f => candidates.filter(f).length;
@@ -309,7 +329,7 @@ export class LiveStore {
     const hires = candidates.filter(c => c.rec === 'Advance').map(c => { const h = { name: c.name, readiness: c.readiness }; R.outcomes.filter(o => o.hire_name === c.name).forEach(o => { h[o.period] = o.vals; }); return h; });
     const audit = R.audit.map(a => ({ t: fmtT(a.at), who: a.who, what: a.what }));
     const roles = (D.roles || []).map(r => { const apps = candidates.filter(c => c.role === r.title); const st = !apps.length ? 'No candidates yet' : apps.some(c => c.stage >= 5) ? 'Combine week' : apps.some(c => c.stage >= 4) ? 'Scheduling combines' : apps.some(c => c.stage >= 2) ? 'Sales decisions' : 'Invites out'; return { ...r, open: null, apps: apps.length, stage: st }; });
-    this.view = { candidates, users, sessions, accoms, applications, decisions, funnel, hires, audit, roles, transcripts, jobs };
+    this.view = { candidates, users, sessions, accoms, applications, decisions, funnel, hires, audit, roles, transcripts, jobs, usedLocations };
     return this.view;
   }
 }

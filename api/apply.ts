@@ -24,8 +24,9 @@ export default async function handler(req, res) {
   try {
     const body = readBody(req);
     const sb = admin();
-    const { data: job } = await sb.from('jobs').select('*').eq('apply_token', String(body.applyToken || '')).maybeSingle();
+    let { data: job } = await sb.from('jobs').select('*').eq('apply_token', String(body.applyToken || '')).maybeSingle();
     if (!job) return send(res, 404, { error: 'This application link is not valid.' });
+    if (job.merged_into) { const { data: canon } = await sb.from('jobs').select('*').eq('id', job.merged_into).maybeSingle(); if (canon) job = canon; }
     if (job.apply_enabled === false || job.status !== 'Open') return send(res, 410, { error: 'Applications for this role are closed.' });
     const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
     const email = String(body.email || '').trim().toLowerCase().slice(0, 120);

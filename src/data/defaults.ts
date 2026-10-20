@@ -1,11 +1,84 @@
 // @ts-nocheck
 // Editable defaults. Each can be changed in Settings (stored in the settings table); the code falls back to these.
 export const FIRST_CALL_KIND = 'First call (phone screen)';
-export const DEFAULT_SCHOOLS = ['Texas State Athletics', 'Texas Tech Athletics'];
-export const DEFAULT_TA_STAGES = ['Applied', 'First call', 'Assessment', 'Combine', 'Final interview', 'Offer', 'Hired', 'Not moving forward'];
+// Schools / properties. A line may carry alternate names after '|' — "Incarnate Word Athletics | UIW | University of the Incarnate Word".
+export const DEFAULT_SCHOOLS = ['Texas State Athletics | TXST | Texas State University', 'Texas Tech Athletics | TTU | Texas Tech University'];
 export const GRADES = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
-export const GRADE_COLOR = g => { const l = String(g || '')[0]; return l === 'A' ? '#34D399' : l === 'B' ? '#E9F0EA' : l === 'C' ? '#F5B84A' : (l === 'D' || l === 'F') ? '#F87171' : '#7E9186'; };
+export const GRADE_COLOR = g => { const l = String(g || '')[0]; return l === 'A' ? 'var(--c-hex-34d399)' : l === 'B' ? 'var(--c-hex-e9f0ea)' : l === 'C' ? 'var(--c-hex-f5b84a)' : (l === 'D' || l === 'F') ? 'var(--c-hex-f87171)' : 'var(--c-hex-7e9186)'; };
 export const SETTINGS_MANAGERS_MAY_EDIT = ['callEvalPrompt', 'schools', 'taStages'];
+
+// The hiring pipeline. Fixed in code because the board's behaviour depends on the stages: Mock pitch is optional (skippable),
+// AD interview leads to an offer letter, an accepted offer with a confirmed start date fills the job.
+export const TA_STAGES = [
+  { id: 'initial', name: 'Initial interview', sub: '' },
+  { id: 'second', name: '2nd round (RSD / Chief of Staff)', short: '2nd round', sub: 'Regional Sales Director / Chief of Staff' },
+  { id: 'mock', name: 'Mock pitch', sub: 'Optional, not every candidate' },
+  { id: 'vp', name: 'VP interview', sub: 'Quick conversation' },
+  { id: 'h2h', name: 'Heart-to-heart', sub: 'Just a conversation' },
+  { id: 'ad', name: 'AD interview', sub: '' },
+  { id: 'offer', name: 'Offer letter', sub: 'Sent, waiting on an answer' },
+  { id: 'hired', name: 'Hired', sub: 'Accepted · job marked Filled' },
+  { id: 'nmf', name: 'Not moving forward', sub: 'Told and closed out' },
+];
+export const STAGE_NAMES = TA_STAGES.map(s => s.name);
+export const DEFAULT_TA_STAGES = STAGE_NAMES;
+// Stage names from the earlier board that still mean the same thing. Anything else is "stranded" and shown in a banner.
+export const LEGACY_STAGE_MAP = { 'Offer': 'Offer letter', 'Hired': 'Hired', 'Not moving forward': 'Not moving forward' };
+export const stageIndex = name => STAGE_NAMES.indexOf(name);
+
+// ---- schools: parse the setting, normalize names, find likely duplicates ----
+const STOP = new Set(['university', 'univ', 'college', 'athletics', 'athletic', 'the', 'of', 'at', 'sports', 'dept', 'department', 'and', '&']);
+export function normSchool(s) {
+  return String(s || '').toLowerCase().replace(/[’'".,()]/g, '').replace(/[-_/]+/g, ' ').split(/\s+/).filter(t => t && !STOP.has(t)).join(' ').trim();
+}
+// Acronyms a name is commonly shortened to: initials of every word, initials without filler words, and the same with a
+// leading "University" assumed ("Incarnate Word" → iw, uiw; "Texas Tech University" → ttu, tt).
+const MINOR = new Set(['of', 'the', 'and', 'at', '&']);
+export function acronyms(name) {
+  const words = String(name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  if (words.length < 2 && !(words.length === 1 && words[0].length > 3)) return [];
+  const all = words.map(w => w[0]).join('');
+  const core = words.filter(w => !MINOR.has(w)).map(w => w[0]).join('');
+  const noKind = words.filter(w => !MINOR.has(w) && !STOP.has(w)).map(w => w[0]).join('');
+  const out = new Set([all, core, noKind, 'u' + noKind, noKind + 'u'].filter(a => a.length >= 2));
+  return [...out];
+}
+// "Name | alias | alias" → { name, aliases, norms, acros }
+export function parseSchools(list) {
+  return (Array.isArray(list) ? list : []).map(line => {
+    const parts = String(line || '').split('|').map(x => x.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const name = parts[0], aliases = parts.slice(1);
+    const names = [name, ...aliases];
+    return { name, aliases, norms: names.map(normSchool).filter(Boolean), acros: [...new Set(names.flatMap(acronyms))] };
+  }).filter(Boolean);
+}
+export const schoolNames = list => parseSchools(list).map(s => s.name);
+// The saved property a typed school refers to: exact (by any alias) → { exact }, close (shared words / prefix) → { suggest }, else null.
+export function matchSchool(input, list) {
+  const n = normSchool(input); if (!n) return null;
+  const schools = parseSchools(list);
+  const raw = String(input || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const exact = schools.find(s => s.norms.includes(n) || (raw.length >= 2 && raw.length <= 6 && s.acros.includes(raw)));
+  if (exact) return { exact: exact.name };
+  const toks = new Set(n.split(' '));
+  let best = null, bestScore = 0;
+  schools.forEach(s => s.norms.forEach(m => {
+    const mt = new Set(m.split(' '));
+    const inter = [...toks].filter(t => mt.has(t)).length;
+    const score = inter / Math.max(toks.size, mt.size) + (m.startsWith(n) || n.startsWith(m) ? 0.5 : 0) + (String(s.name).toLowerCase().replace(/[^a-z]/g, '').startsWith(n.replace(/[^a-z]/g, '')) ? 0.3 : 0);
+    if (score > bestScore) { bestScore = score; best = s; }
+  }));
+  return best && bestScore >= 0.5 ? { suggest: best.name } : null;
+}
+// Jobs that are probably the same job: same role, same normalized school (via the saved aliases). Returns { key → [jobs] }.
+export function dupeGroups(jobs, schoolList) {
+  const schools = parseSchools(schoolList);
+  const canon = prog => { const n = normSchool(prog); const hit = schools.find(s => s.norms.includes(n)); return hit ? normSchool(hit.name) : n; };
+  const groups = {};
+  (jobs || []).forEach(j => { if (j.merged) return; const k = (j.title || '') + '|' + canon(j.program); (groups[k] = groups[k] || []).push(j); });
+  return groups;
+}
 
 // Where a self-applied candidate came from, read from the utm_* / src / fbclid parameters the browser captured.
 export const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'src', 'ref', 'fbclid', 'gclid'];

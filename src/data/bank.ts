@@ -6,6 +6,8 @@
 
 import { RATIONALE, SCALE_NOTE } from './rationale';
 import { SENIOR_V5 } from './bank-dos-v5';
+import { AE_V12 } from './bank-ae-v12';
+import { SERVICE_V12 } from './bank-dos-service-v12';
 
 const E = 100, S = 78, N = 50, M = 28, R = 6;
 
@@ -31,9 +33,12 @@ const wr = (id, comp, text, opts) => ({
 
 /* ─────────────────────────── ENTRY-LEVEL SALES ─────────────────────────── */
 
-const ENTRY = {
-  id: "entry",
-  name: "Entry Level Sales Professional",
+// Retired October 2026 in favour of Account Executive V1.2 (bank-ae-v12.ts). Kept so candidates who answered it still score.
+const ENTRY_V4 = {
+  id: "entry_v4",
+  legacyOf: "entry",
+  hidden: true,
+  name: "Entry Level Sales Professional (v4, retired)",
   tag: "Hiring for potential, not resume",
   blurb: "Raw traits over experience. We are looking for someone with the materials to become an elite seller.",
   experienceWeighting: "Low. Limited sales experience, unfamiliar terminology, and no quota history are not penalized.",
@@ -334,9 +339,12 @@ const SENIOR_V4 = {
 
 /* ────────────────── SERVICE / ACCOUNT MANAGEMENT SALES ────────────────── */
 
-const SERVICE = {
-  id: "service",
-  name: "Director of Service",
+// Retired October 2026 in favour of Director of Service V1.2 (bank-dos-service-v12.ts). Kept so candidates who answered it still score.
+const SERVICE_V4 = {
+  id: "service_v4",
+  legacyOf: "service",
+  hidden: true,
+  name: "Director of Service (v4, retired)",
   tag: "Grows the account, not just serves it",
   blurb: "Excellent service is the entry requirement. This role sells inside the account and protects revenue.",
   experienceWeighting: "Client experience matters, but strong service history cannot offset passive commercial behavior.",
@@ -481,8 +489,17 @@ const SERVICE = {
   },
 };
 
-export const ROLES = { entry: ENTRY, senior: SENIOR_V5, service: SERVICE, senior_v4: SENIOR_V4 };
-export const ROLE_LIST = [ENTRY, SENIOR_V5, SERVICE];
+export const ROLES = { entry: AE_V12, senior: SENIOR_V5, service: SERVICE_V12, senior_v4: SENIOR_V4, entry_v4: ENTRY_V4, service_v4: SERVICE_V4 };
+export const ROLE_LIST = [AE_V12, SENIOR_V5, SERVICE_V12];
+
+// Least-likely pick: 100 minus the option's value, or — for quality-based banks (leastNorm) — normalized so ruling out the
+// lowest-scoring option always earns 100 and ruling out the benchmark earns 0.
+export function leastPts(role, q, lo) {
+  if (!lo) return null;
+  if (!role.leastNorm) return 100 - lo.score;
+  const hi = Math.max(...q.opts.map(o => o.score)), low = Math.min(...q.opts.map(o => o.score));
+  return hi === low ? 50 : Math.round((hi - lo.score) / (hi - low) * 100);
+}
 
 export const DEFAULT_THRESHOLDS = { strongPass: 85, pass: 72, flag: 58, fail: 42 };
 
@@ -585,7 +602,7 @@ export function applyEdits(role, edits) {
       const eo = (e.opts || [])[i] || {};
       const num = Number(eo.score);
       const score = eo.score !== undefined && eo.score !== null && eo.score !== "" && !isNaN(num) ? Math.max(0, Math.min(100, Math.round(num))) : o.score;
-      return { ...o, text: eo.text ? eo.text : o.text, score, interp: score === o.score ? o.interp : null, flag: eo.flag !== undefined ? (eo.flag || null) : o.flag, positive: eo.positive !== undefined ? (eo.positive || null) : o.positive };
+      return { ...o, text: eo.text ? eo.text : o.text, score, interp: score === o.score ? o.interp : null, sev: score === o.score ? o.sev : null, flag: eo.flag !== undefined ? (eo.flag || null) : o.flag, positive: eo.positive !== undefined ? (eo.positive || null) : o.positive };
     });
     return { ...q, text: e.text || q.text, why: e.why || q.why, opts, edited: true };
   };
@@ -615,10 +632,10 @@ export function itemEvidence(role, answers) {
     const o = q.opts[mi]; if (!o) return;
     const lo = li != null ? q.opts[li] : null;
     const best = q.opts.slice().sort((x, y) => y.score - x.score)[0];
-    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, least: !!lo && x.i === lo.i, flag: x.flag || "", positive: x.positive || "", interp: x.interp || "", reason: x.reason || "", signal: x.interp || SIGNAL(x.score) }));
-    const leastScore = lo ? 100 - lo.score : null;
+    const options = q.opts.map(x => opt(x.text, x.score, { chosen: x.i === o.i, least: !!lo && x.i === lo.i, flag: x.flag || "", positive: x.positive || "", interp: x.interp || "", reason: x.reason || "", signal: x.interp || SIGNAL(x.score), cls: x.cls || "", profile: x.profile || "" }));
+    const leastScore = leastPts(role, q, lo);
     const leastSignal = !lo ? "" : lo.score <= 10 ? "Correctly ruled out the riskiest move" : lo.score >= 95 ? "Ruled out the strongest move" : "Ruled out a " + String(lo.interp || SIGNAL(lo.score)).toLowerCase() + " option";
-    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, title: q.title || "", construct: q.construct || "", q: q.text, answer: o.text, score: o.score, signal: o.interp || SIGNAL(o.score), reason: o.reason || "", best: best.i === o.i ? "" : best.text, flag: o.flag || "", positive: o.positive || "", why: whyFor(role, q), miss: q.miss || "", options, edited: !!q.edited, least: lo ? lo.text : "", leastScore, leastSignal, twoPick: !!role.twoPick });
+    out.push({ id: q.id, kind: "scenario", comp: q.comp, compName: role.competencies[q.comp].name, title: q.title || "", construct: q.construct || "", q: q.text, answer: o.text, score: o.score, signal: o.interp || SIGNAL(o.score), reason: o.reason || "", best: best.i === o.i ? "" : best.text, flag: o.flag || "", positive: o.positive || "", why: whyFor(role, q), miss: q.miss || "", options, edited: !!q.edited, least: lo ? lo.text : "", leastScore, leastSignal, twoPick: !!role.twoPick, probe: q.probe || "", calibrate: q.calibrate || "", gameability: q.gameability || "", cls: o.cls || "", profile: o.profile || "" });
   });
   role.worst.forEach(q => {
     const pick = answers[q.id]; if (pick == null) return;
@@ -677,13 +694,14 @@ export function score(role, answers, settings, meta) {
     // Two-pick items: the least-likely choice scores too (100 minus that option's value). Ruling out the benchmark is a flag in its own right.
     const lo = li != null ? q.opts[li] : null;
     if (lo) {
-      add(q.comp, 100 - lo.score);
-      (scenBuckets[q.comp] = scenBuckets[q.comp] || []).push(100 - lo.score);
-      if (lo.score >= 95) redFlags.push({ comp: q.comp, label: "Ruled out the strongest move as something they would never do", qid: q.id, severity: "meaningful", context: q.text, chosen: "Least likely: " + lo.text, better: "", score: 100 - lo.score, why: ev.why || "" });
+      const lp = leastPts(role, q, lo);
+      add(q.comp, lp);
+      (scenBuckets[q.comp] = scenBuckets[q.comp] || []).push(lp);
+      if (lo.score >= 95) redFlags.push({ comp: q.comp, label: "Ruled out the strongest move as something they would never do", qid: q.id, severity: "meaningful", context: q.text, chosen: "Least likely: " + lo.text, better: "", score: lp, why: ev.why || "" });
     }
     if (opt.flag) redFlags.push({
       comp: q.comp, label: opt.flag, qid: q.id,
-      severity: opt.score <= 10 ? "critical" : opt.score <= 30 ? "meaningful" : "minor",
+      severity: opt.sev || (opt.score <= 10 ? "critical" : opt.score <= 30 ? "meaningful" : "minor"),
       context: q.text, chosen: opt.text, better: ev.best || "", score: opt.score, why: ev.why || "",
     });
     if (opt.positive) positives.push({ comp: q.comp, label: opt.positive, qid: q.id, context: q.text, chosen: opt.text, why: ev.why || "" });
@@ -778,6 +796,27 @@ export function score(role, answers, settings, meta) {
   const strengths = ranked.filter(c => c.score >= 75).slice(0, 5);
   const concerns = ranked.slice().reverse().filter(c => c.score < 65).slice(0, 4);
 
+  // Failure-profile reads (AE V1.2, Service V1.2): a named pattern in the brief, detected from tagged picks and category
+  // scores. They add interview probes to the report and never change a score.
+  const compScore = Object.fromEntries(comps.map(c => [c.key, c.score]));
+  const mostIdx = id => { const raw = answers[id]; return raw == null ? null : (typeof raw === "object" ? raw.m : raw); };
+  const chosenOf = q => { const mi = mostIdx(q.id); return mi == null ? null : q.opts[mi] || null; };
+  const probes = (role.profiles || []).map(p => {
+    const tagged = role.scenarios.filter(q => { const o = chosenOf(q); return o && o.profile === p.name; }).map(q => q.id);
+    const ctx = {
+      tagged,
+      cls: id => { const q = role.scenarios.find(x => x.id === id); const o = q ? chosenOf(q) : null; return o ? (o.cls || "") : ""; },
+      pick: id => mostIdx(id),
+      comp: k => (compScore[k] == null ? 100 : compScore[k]),
+      insight: id => (answers[id] == null ? null : answers[id]),
+    };
+    let hit = false;
+    try { hit = !!p.rule(ctx); } catch (e) { hit = false; }
+    if (!hit) return null;
+    const evidence = tagged.map(id => { const q = role.scenarios.find(x => x.id === id); const o = chosenOf(q); return { id, kind: "scenario", q: q.text, answer: o.text, score: o.score, signal: o.interp || SIGNAL(o.score), best: "", why: q.why || "", reason: o.reason || "" }; });
+    return { profile: p.name, desc: p.desc, rule: p.ruleText, probe: p.probe, items: tagged, evidence };
+  }).filter(Boolean);
+
   // Follow-ups: one per competency that breached a critical floor, carried a red flag, or scored as a concern —
   // each with the reason it is on the list and the answers that put it there.
   const fuKeys = [], fuWhy = {};
@@ -808,7 +847,7 @@ export function score(role, answers, settings, meta) {
     scenario: { avg: scenAvg, answered: scen.length, total: role.scenarios.length, elite: eliteCount, weak: weakCount },
     references: role.behavioral,
     items,
-    insights, pace,
+    insights, pace, probes,
     pilot: !!role.pilot, pilotNote: role.pilotNote || "", version: role.version || "", twoPick: !!role.twoPick,
     engine: 3,
   };
@@ -850,4 +889,4 @@ export function demoAnswers(role, profile) {
   return out;
 }
 
-export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, LIKERT_LABELS, RATIONALE, SCALE_NOTE, defaultSettings, normalizeSettings, profileIdForAnswers, profileForReport, shuffled, scoredItems, flowFor, itemEvidence, whyFor, applyEdits, score, demoAnswers };
+export const PEAK_BANK = { SIGNAL, ROLES, ROLE_LIST, DEFAULT_THRESHOLDS, LIKERT_LABELS, RATIONALE, SCALE_NOTE, defaultSettings, normalizeSettings, profileIdForAnswers, profileForReport, shuffled, scoredItems, flowFor, itemEvidence, whyFor, applyEdits, leastPts, score, demoAnswers };

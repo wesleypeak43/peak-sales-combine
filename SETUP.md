@@ -65,7 +65,7 @@ Any other staff member: Admin → **Users** → Invite a staff member → they g
 
 ## Part 6 — Run a real candidate
 
-1. **Pipeline → Add a candidate** → name, email, one of the three roles (**Entry Level Sales Professional / Director of Sales / Director of Service**), and the **school / property** the role is for (this is what the candidate sees in the email and portal). Attach a résumé if you already have one. Then either:
+1. **Pipeline → Add a candidate** → name, email, one of the three roles (**Account Executive / Director of Sales / Director of Service**), and the **school / property** the role is for (this is what the candidate sees in the email and portal). Attach a résumé if you already have one. Then either:
    - **Add & email assessment link** — the full assessment (job preview, details & résumé, Sales Decisions · 20–30 minutes, all multiple choice), or
    - **Details-only link** — the candidate only shares contact details and a résumé (about two minutes). Use **Send assessment link** on their row later, or
    - **Add without sending a link** — a manual record (for people you already screened). **Email assessment link** on the row whenever you're ready.
@@ -102,7 +102,13 @@ With this, scheduling a combine creates the event on a Peak calendar, invites th
 
 ## Part 9 — Jobs board, application links, reminders
 
-- **Jobs tab** — one pipeline per role + school. Candidates land on a job automatically from the role and school you pick when adding them (or when they apply through a link). Stages are set by what they’ve completed until you move them with the dropdown on a card. Edit the stage list in **Settings → Pipeline stages**.
+- **Jobs tab** — one pipeline per role + school. Pick the job from the searchable dropdown (grouped by school, open jobs by default, tick *Show closed & filled* for the rest). New candidates land in **Initial interview**; the stages are Peak's real ones: Initial interview → 2nd round (RSD / Chief of Staff) → Mock pitch (optional — *Skip mock pitch → VP interview*) → VP interview → Heart-to-heart → AD interview → Offer letter → Hired, plus Not moving forward.
+- **Decisions wait until the candidate is told.** On a card pick *Move forward* or *Not moving forward*: the card turns amber and stays put until you tick *I let them know*; only then does it move. The header counts how many people still need to hear from you. At Offer letter, *Accepted* + a start date + *I confirmed their start date* moves them to Hired and flips the job to **Filled** automatically.
+- **Stranded candidates** (stuck in a stage that no longer exists, like the old "Assessment") get a banner on the job with *Move all to…*.
+- **Likely duplicates** — jobs with the same role and the same school under a different spelling ("Charleston Southern" / "Charleston Southern University") are flagged in the picker. **Job settings → Likely duplicates → Merge** moves every candidate onto the job you keep; the old application links keep working and land on it. Add alternate names in **Settings → Schools** ("Incarnate Word Athletics | UIW | University of the Incarnate Word") so typed variations are recognised; the Add-a-candidate form checks typed schools against saved properties and existing jobs (including acronyms like UIW) before letting you add a new one.
+- **Job settings** (collapsed under the picker) hold status, links, the careers-page posting, tracking links, sources, and merging — so the pipeline sits right under the picker.
+- **Location** on the Add-a-candidate form suggests places used before first, then a built-in US city list. For live place search add VITE_MAPBOX_TOKEN (a Mapbox public token) in Vercel and redeploy.
+- **Light mode** — the ☀ Light / ☾ Dark button in the header switches the whole staff app; the choice is remembered per browser.
 - **Copy application link** — a public page where candidates enter their own details and go straight into the assessment; no staff step. Switch it off per job with *applications off*.
 - **Copy external board link** — a read-only view of that job’s board (names, stages, progress chips; no scores or flags) for people outside the team. Switch it off with *sharing off*.
 - **Reminders** — a candidate who hasn’t finished their link gets an email 48 hours after it was sent and a final one at 72 hours (which refreshes the link). Vercel runs `/api/remind` hourly from `vercel.json` (Pro plan; Hobby runs cron once a day). Set `CRON_SECRET` in Vercel to any long random string so only Vercel can trigger it. **Settings → Send due reminders now** runs the same check on demand.
@@ -116,6 +122,10 @@ With this, scheduling a combine creates the event on a Peak calendar, invites th
 - **Tracking links (one per channel)**: *Copy Facebook / Instagram ad link*, *Copy Teamworks posting link*, *Copy LinkedIn link*. Each is the job's application link tagged with `utm_source`, `utm_medium`, and this job's `utm_campaign`. In **Facebook Ads Manager** paste the Facebook link as the ad's destination URL (or add its parameters under *URL parameters*). Facebook's own `fbclid` is also recognised, so even an untagged Facebook link is attributed.
 - Every self-applied candidate shows **Applied via Facebook ad · campaign** (or Teamworks, LinkedIn, Careers page) on the pipeline row and profile. The Jobs tab shows the per-job breakdown and per-campaign counts; the Funnel tab shows the totals.
 - Candidates who arrive from the careers page keep their attribution through the job page and into the application (kept for the browser session).
+
+## Account Executive V1.2 and Director of Service V1.2
+
+The entry-level role is now called **Account Executive** everywhere (existing candidates and jobs are renamed by the schema update; the old title still maps for scoring). It takes the **Account Executive V1.2** bank: 34 single-pick scenarios across six categories (Coachability, Hunger & Drive, Resilience, Resourcefulness, Accountability, Early Sales Instinct), experience-neutral, with eight unscored Manager Insight questions. **Director of Service V1.2**: 36 two-pick scenarios (most / least likely) across six categories, quality-based scores, least-likely picks normalized so ruling out the riskiest option always earns 100, five unscored insights. Both banks carry **failure-profile reads** (Uncoachable, Excuse Maker, Comfort-Seeker, People Pleaser, Reactive Account Manager…) that appear on the report as *Patterns to probe in interview* with the answers that fired them — they never change a score. Items marked *Calibrate before launch* in the briefs are shown in the Question bank; review them with leadership before the first real candidates. Candidates who answered the previous Entry Level / Director of Service banks keep scoring and reading against them (shown as *v4, retired*). The Director of Sales bank was not touched.
 
 ## Director of Sales assessment — V5.1
 
@@ -132,7 +142,7 @@ Items are interleaved and answer-shuffled per candidate, followed by three **non
 
 ## Upgrading an existing database
 
-After uploading a new version of the code: Supabase → **SQL Editor** → paste the whole `supabase/schema.sql` → **Run** again. It adds new tables and columns without touching existing data (v3.3 adds job-posting fields, application-source tracking, and the public careers listing; v3.2 added jobs, pipeline stages, reminder tracking, transcript grades, and the public board / application functions). Existing scouting reports show a **Re-score with evidence** button on the profile — click it once to attach the answer-level evidence to reports scored before this version.
+After uploading a new version of the code: Supabase → **SQL Editor** → paste the whole `supabase/schema.sql` → **Run** again. It adds new tables and columns without touching existing data (v3.5 adds the pending-decision columns, start dates, job merging, and renames the entry role to Account Executive; v3.3 adds job-posting fields, application-source tracking, and the public careers listing; v3.2 added jobs, pipeline stages, reminder tracking, transcript grades, and the public board / application functions). Existing scouting reports show a **Re-score with evidence** button on the profile — click it once to attach the answer-level evidence to reports scored before this version.
 
 ---
 
